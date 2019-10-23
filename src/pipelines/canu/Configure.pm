@@ -43,6 +43,12 @@ use Sys::Hostname;
 use canu::Defaults;
 use canu::Execution;
 
+###############################################################################
+
+###############################################################################
+# Utilities
+###############################################################################
+
 #  This is called to expand parameter ranges for memory and thread parameters.
 #  Examples of valid ranges:
 #
@@ -54,7 +60,6 @@ use canu::Execution;
 #  Quirks:  1g-2000m will increment every 1m.
 #           1g-2000m:1g only adds 1g.
 #           1g-2048m:1g adds 1 and 2g.
-
 sub expandRange ($$$$) {
     my $var = shift @_;
     my $val = shift @_;
@@ -70,44 +75,42 @@ sub expandRange ($$$$) {
         my $stp;  my $stpu;
 
         #  Decode the range.
-
-        if      ($v =~ m/^(\d+\.{0,1}\d*)([kKmMgGtT]{0,1})$/) {
+        if ($v =~ m/^(\d+\.{0,1}\d*)([kKmMgGtT]{0,1})$/) {
             $bgn = $1;  $bgnu = $2;
             $end = $1;  $endu = $2;
             $stp =  1;  $stpu = $2;
-        } elsif ($v =~ m/^(\d+\.{0,1}\d*)([kKmMgGtT]{0,1})-(\d+\.{0,1}\d*)([kKmMgGtT]{0,1})$/) {
+        }
+        elsif ($v =~ m/^(\d+\.{0,1}\d*)([kKmMgGtT]{0,1})-(\d+\.{0,1}\d*)([kKmMgGtT]{0,1})$/) {
             $bgn = $1;  $bgnu = $2;
             $end = $3;  $endu = $4;
             $stp =  1;  $stpu = $4;
-        } elsif ($v =~ m/^(\d+\.{0,1}\d*)([kKmMgGtT]{0,1})-(\d+\.{0,1}\d*)([kKmMgGtT]{0,1}):(\d+\.{0,1}\d*)([kKmMgGtT]{0,1})$/) {
+        }
+        elsif ($v =~ m/^(\d+\.{0,1}\d*)([kKmMgGtT]{0,1})-(\d+\.{0,1}\d*)([kKmMgGtT]{0,1}):(\d+\.{0,1}\d*)([kKmMgGtT]{0,1})$/) {
             $bgn = $1;  $bgnu = $2;
             $end = $3;  $endu = $4;
             $stp = $5;  $stpu = $6;
-        } else {
+        }
+        else {
             caExit("can't parse '$var' entry '$v'", undef);
         }
 
         #  Undef things that are null.  The code that follows this was written assuming undef.
-
         $bgnu = undef   if ($bgnu eq "");
         $endu = undef   if ($endu eq "");
         $stpu = undef   if ($stpu eq "");
 
         #  Process the range
-
         my $def = defined($bgnu) + defined($endu) + defined($stpu);
 
         #  If no units, this could be a memory or a thread setting.  Don't use units.
-        if      ($def == 0) {
+        if ($def == 0) {
         }
-
         #  If only one unit specified, set the others to the same.
         elsif ($def == 1) {
             if    (defined($bgnu))  { $endu = $stpu = $bgnu;  }
             elsif (defined($endu))  { $bgnu = $stpu = $endu;  }
             elsif (defined($stpu))  { $bgnu = $endu = $stpu;  }
         }
-
         #  If two units specified, set the unset as:
         #    bgn or end unset - set based on the other range
         #    stp unset        - set on end if stp<end otherwise bgn
@@ -125,13 +128,11 @@ sub expandRange ($$$$) {
             $stpu = $endu  if (!defined($stpu) && ($stp <= $end));
             $stpu = $bgnu  if (!defined($stpu) && ($stp >  $end));
         }
-
         #  Nothing to do if all three are set!
         elsif ($def == 3) {
         }
 
         #  Convert the value and unit to gigabytes.
-
         my $b = adjustMemoryValue("$bgn$bgnu");
         my $e = adjustMemoryValue("$end$endu");
         my $s = adjustMemoryValue("$stp$stpu");
@@ -139,7 +140,6 @@ sub expandRange ($$$$) {
         #  Enforce the user supplied minimum and maximum.  We cannot 'decrease min to user supplied
         #  maximum' because this effectively ignores the task setting.  For, e.g., batMemory=64-128
         #  and maxMemory=32, we want it to fail.
-
         $b = $min   if ((defined($min)) && ($b < $min));    #  Increase min to user supplied minimum.
         $e = $min   if ((defined($min)) && ($e < $min));    #  Increase max to user supplied minimum.
 
@@ -147,7 +147,6 @@ sub expandRange ($$$$) {
         $e = $max   if ((defined($max)) && ($e > $max));    #  Decrease max to use supplied maximum.
 
         #  Iterate over the range, push values to test onto the array.
-
         for (my $ii=$b; $ii<=$e; $ii += $s) {
             push @r, $ii;
         }
@@ -163,6 +162,9 @@ sub expandRange ($$$$) {
 }
 
 
+# Get the maximum amount of memory and CPU from the "availableHosts" defined in
+#   `Defaults.pm` (effective for local run), or
+#   specified in one of the "Grid_*.pm" configurations.
 sub findGridMaxMemoryAndThreads () {
     my @grid   = split '\0', getGlobal("availableHosts");
     my $maxmem = 0;
@@ -178,13 +180,17 @@ sub findGridMaxMemoryAndThreads () {
     return($maxmem, $maxcpu);
 }
 
+###############################################################################
+# Major technical deal
+###############################################################################
 
-#  Side effect!  This will RESET the $global{} parameters to the computed value.  This lets
-#  the rest of canu - in particular, the part that runs the jobs - use the correct value.  Without
-#  resetting, I'd be making code changes all over the place to support the values returned.
+#  Recursive call to getAllowedResources() wants the prototype.
+sub getAllowedResources ($$$$$@);
 
-sub getAllowedResources ($$$$$@);  #  Recursive call to getAllowedResources() wants the prototype.
-
+#  Side effect!
+#  This will RESET the $global{} parameters defined in "Defaults.pm" to the computed value.
+#  This lets the rest of canu - in particular, the part that runs the jobs - use the correct value.
+#  Without resetting, I'd be making code changes all over the place to support the values returned.
 sub getAllowedResources ($$$$$@) {
     my $tag  = shift @_;  #  Variant, e.g., "cor", "utg"
     my $alg  = shift @_;  #  Algorithm, e.g., "mhap", "ovl"
@@ -193,111 +199,119 @@ sub getAllowedResources ($$$$$@) {
     my $uni  = shift @_;  #  There's only one task to run (bogart, gfa)
     my $dbg  = shift @_;  #  Optional, report debugging stuff
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    # Computing environment (grid or local)
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #  If no grid, or grid not enabled, everything falls under 'lcoal'.
-
     my $class = ((getGlobal("useGrid") ne "0") && (defined(getGlobal("gridEngine")))) ? "grid" : "local";
 
     #  If grid, but no hosts, fail.
-
     if (($class eq "grid") && (!defined(getGlobal("availableHosts")))) {
         caExit("invalid useGrid (" . getGlobal("useGrid") . ") and gridEngine (" . getGlobal("gridEngine") . "); found no execution hosts - is grid available from this host?", undef);
     }
 
-    #  Figure out limits.
-
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    #  Globally available resources.
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     my $minMemory    = getGlobal("minMemory");
     my $minThreads   = getGlobal("minThreads");
 
     my $maxMemory    = getGlobal("maxMemory");
     my $maxThreads   = getGlobal("maxThreads");
 
-    my $taskMemory   = getGlobal("${tag}${alg}Memory");   #  Algorithm limit, "utgovlMemory", etc.
-    my $taskThreads  = getGlobal("${tag}${alg}Threads");  #
-
-    #  The task limits MUST be defined.
-
-    caExit("${tag}${alg}Memory is not defined", undef)   if (!defined($taskMemory));
-    caExit("${tag}${alg}Threads is not defined", undef)  if (!defined($taskThreads));
-
-    #  If the maximum limits aren't set, default to 'unlimited' (for the grid; we'll effectively filter
-    #  by the number of jobs we can fit on the hosts) or to the current hardware limits.
-
-    if ($dbg) {
-        print STDERR "--\n";
-        print STDERR "-- ERROR\n";
-        print STDERR "-- ERROR  Limited to at least $minMemory GB memory via minMemory option\n"   if (defined($minMemory));
-        print STDERR "-- ERROR  Limited to at least $minThreads threads via minThreads option\n"   if (defined($minThreads));
-        print STDERR "-- ERROR  Limited to at most $maxMemory GB memory via maxMemory option\n"    if (defined($maxMemory));
-        print STDERR "-- ERROR  Limited to at most $maxThreads threads via maxThreads option\n"    if (defined($maxThreads));
-    }
-
-    #  Figure out the largest memory and threads that could ever be supported.  This lets us short-circuit
-    #  the loop below.
-
+    #  Figure out the largest memory and threads that could ever be supported.
+    #  This lets us short-circuit the loop below.
+    #  If the maximum limits aren't set, default to 'unlimited'
+    #  (for the grid; we'll effectively filter by the number of jobs we can fit on the hosts),
+    #  or to the current hardware limits.
     my ($gridMaxMem, $gridMaxThr) = findGridMaxMemoryAndThreads();
 
-    $maxMemory  = (($class eq "grid") ? $gridMaxMem : getPhysicalMemorySize())  if (!defined($maxMemory));
     $maxThreads = (($class eq "grid") ? $gridMaxThr : getNumberOfCPUs())        if (!defined($maxThreads));
+    $maxMemory  = (($class eq "grid") ? $gridMaxMem : getPhysicalMemorySize())  if (!defined($maxMemory));
 
-    #  Build a list of the available hardware configurations we can run on.  If grid, we get this
-    #  from the list of previously discovered hosts.  If local, it's just this machine.
+    #  Then build a list of the available hardware configurations we can run on.
+    my @gridNode;  #  Number of nodes
+    my @gridCore;  #  Number of cores
+    my @gridMemo;  #  GB's of memory
 
-    my @gridCor;  #  Number of cores
-    my @gridMem;  #  GB's of memory
-    my @gridNum;  #  Number of nodes
-
-    if ($class eq "grid") {
+    if ($class eq "grid") { #  If grid, we get this from the list of previously discovered hosts.
         my @grid = split '\0', getGlobal("availableHosts");
 
         foreach my $g (@grid) {
             my ($cpu, $mem, $num) = split '-', $g;
 
             if (($cpu > 0) && ($mem > 0) && ($num > 0)) {
-                push @gridCor, $cpu;
-                push @gridMem, $mem;
-                push @gridNum, $num;
+                push @gridNode, $num;
+                push @gridCore, $cpu;
+                push @gridMemo, $mem;
             }
         }
-    } else {
-        push @gridCor, $maxThreads;
-        push @gridMem, $maxMemory;
-        push @gridNum, 1;
+    }
+    else { #  If local, it's just this machine.
+        push @gridNode, 1;
+        push @gridCore, $maxThreads;
+        push @gridMemo, $maxMemory;
     }
 
     if ($dbg) {
-        print STDERR "-- ERROR\n";
-        print STDERR "-- ERROR  Found ", scalar(@gridCor), " machine ", ((scalar(@gridCor) == 1) ? "configuration:\n" : "configurations:\n");
-        for (my $ii=0; $ii<scalar(@gridCor); $ii++) {
-            print STDERR "-- ERROR    class$ii - $gridNum[$ii] machines with $gridCor[$ii] cores with $gridMem[$ii] GB memory each.\n";
+        print STDERR "-- DEBUG\n";
+        print STDERR "-- DEBUG  Found ", scalar(@gridCore), " machine ", ((scalar(@gridCore) == 1) ? "configuration:\n" : "configurations:\n");
+        for (my $ii=0; $ii<scalar(@gridCore); $ii++) {
+            print STDERR "-- DEBUG    class$ii - $gridNode[$ii] machines with $gridCore[$ii] cores with $gridMemo[$ii] GB memory each.\n";
         }
     }
 
-    #  The task usually has multiple choices, and we have a little optimization problem to solve.  For each
-    #  pair of memory/threads, compute three things:
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    # Task specific resources picking
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    my $taskMemory   = getGlobal("${tag}${alg}Memory");   #  Algorithm limit, "utgovlMemory", etc.
+    my $taskThreads  = getGlobal("${tag}${alg}Threads");  #
+
+    #  The task limits MUST be defined.
+    caExit("${tag}${alg}Memory is not defined", undef)   if (!defined($taskMemory));
+    caExit("${tag}${alg}Threads is not defined", undef)  if (!defined($taskThreads));
+
+    if ($dbg) {
+        print STDERR "--\n";
+        print STDERR "-- DEBUG\n";
+        print STDERR "-- DEBUG  Limited to at least $minMemory GB memory via minMemory option\n"   if (defined($minMemory));
+        print STDERR "-- DEBUG  Limited to at least $minThreads threads via minThreads option\n"   if (defined($minThreads));
+        print STDERR "-- DEBUG  Limited to at most $maxMemory GB memory via maxMemory option\n"    if (defined($maxMemory));
+        print STDERR "-- DEBUG  Limited to at most $maxThreads threads via maxThreads option\n"    if (defined($maxThreads));
+    }
+
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    #  The task usually has multiple choices, and we have a little optimization problem to solve.
+    #  Find task memory/thread settings that will maximize the number of cores running.
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    # solutions
+    my $pickedThreads = undef;
+    my $pickedMemory  = undef;
+
+    #  For each pair of memory/threads, compute three things:
     #    a) how many processes we can get running
     #    b) how many cores we can get running
     #    c) how much memory we can consume
     #  We then (typically) want to maximize the number of cores we can get running.
     #  Other options would be number of cores * amount of memory.
-
-    my @taskMemory  = expandRange("${tag}${alg}Memory",  $taskMemory,  $minMemory,  $maxMemory);
     my @taskThreads = expandRange("${tag}${alg}Threads", $taskThreads, $minThreads, $maxThreads);
+    my @taskMemory  = expandRange("${tag}${alg}Memory",  $taskMemory,  $minMemory,  $maxMemory);
+    if ($dbg) {
+        print STDERR "-- DEBUG\n";
+        print STDERR "-- DEBUG  Searching through all possible configurations of\n";
+        print STDERR "-- DEBUG  threads: (@taskThreads)\n";
+        print STDERR "-- DEBUG  memory : (@taskMemory)\n";
+    }
 
-    #  Find task memory/thread settings that will maximize the number of cores running.  This used
-    #  to also compute best as 'cores * memory' but that is better handled by ordering the task
-    #  settings parameters.  The example below will pick the largest (last) configuration that
-    #  maximizes core utilization:
+    #  This used to also compute best as 'cores * memory' but that is better handled by ordering the task settings parameters.
+    #  The example below will pick the largest (last) configuration that maximizes core utilization:
     #
     #    taskThreads = 4,8,32,64
     #    taskMemory  = 16g,32g,64g
-
     my $bestCores      = 0;
     my $bestMemory     = 16 * 1024 * 1024;   #  16 petabytes.
-    my $bestCoresM     = undef;
-    my $bestCoresT     = undef;
     my $availMemoryMin = undef;
     my $availMemoryMax = undef;
-
     foreach my $m (@taskMemory) {
         foreach my $t (@taskThreads) {
             #if ($dbg && (($m > $maxMemory) || ($t > $maxThreads))) {
@@ -308,30 +322,31 @@ sub getAllowedResources ($$$$$@) {
 
             #  Save this memory size.  ovsMemory uses a list of possible memory sizes to
             #  pick the smallest one that results in an acceptable number of files.
-
             $availMemoryMin = $m    if (!defined($availMemoryMin) || ($m < $availMemoryMin));
             $availMemoryMax = $m    if (!defined($availMemoryMax) || ($availMemoryMax < $m));
 
             #  For a job using $m GB memory and $t threads, we can compute how many processes will
             #  fit on each node in our set of available machines.  The smaller of the two is then
             #  the number of processes we can run on this node.
-
-            my $processes = 0;
+            my $processes = 0; # note: practically unused now
             my $cores     = 0;
             my $memory    = 0;
 
-            for (my $ii=0; $ii<scalar(@gridCor); $ii++) {                                 #  Each process uses:
-                my $np_cpu = $gridNum[$ii] * (($t == 0) ? 1 : int($gridCor[$ii] / $t));   #    $t cores, node has $gridCor[$ii] available.
-                my $np_mem = $gridNum[$ii] * (($m == 0) ? 1 : int($gridMem[$ii] / $m));   #    $m GBs,   node ame $gridMem[$ii] available.
-
-                my $np = ($np_cpu < $np_mem) ? $np_cpu : $np_mem;      #  Number of processes we can fit on this machine.
+            # iterate over hosts
+            my $num_hosts = scalar(@gridNode);
+            for (my $ii = 0; $ii < $num_hosts; $ii++) {
+                # Each process can use these many processes, based on available cores/memory on each node (assuming homogeneous setup on the nodes) of the host
+                # remember that for local mode $num_hosts is always 1, @gridNode = [1], and @gridCore = [maxThreads], @gridMemo = [maxMemory]
+                my $np_cpu = $gridNode[$ii] * (($t == 0) ? 1 : int($gridCore[$ii] / $t));   #    each node has $gridCore[$ii] available, evenly divided among $t cores
+                my $np_mem = $gridNode[$ii] * (($m == 0) ? 1 : int($gridMemo[$ii] / $m));   #    each node has $gridMemo[$ii] available, evenly divided among $m GBs
+                #  But the limit is the lower of the two
+                my $np = ($np_cpu < $np_mem) ? $np_cpu : $np_mem;
 
                 if ($dbg) {
-                    print STDERR "-- ERROR  for $t threads and $m memory - class$ii can support $np_cpu jobs(cores) and $np_mem jobs(memory), so $np jobs.\n";
+                    print STDERR "-- DEBUG  for $t threads and $m memory - class$ii can support $np_cpu jobs(cores) and $np_mem jobs(memory), so $np jobs.\n";
                 }
 
                 #  If we only need to run one task, just remember if we can run the task on any machine here.
-
                 if ($uni) {
                     if ($np > 0) {
                         $processes  = 1;
@@ -339,10 +354,7 @@ sub getAllowedResources ($$$$$@) {
                         $memory     = $m;
                     }
                 }
-
-                #  Otherwise, sum the number of processes we can run on the entire grid.
-
-                else {
+                else { #  Otherwise, sum the number of processes we can run on the entire grid.
                     $processes += $np;        #  Total number of processes running
                     $cores     += $np * $t;   #  Total cores in use
                     $memory    += $np * $m;   #  Total memory in use
@@ -350,25 +362,23 @@ sub getAllowedResources ($$$$$@) {
             }
 
             if ($dbg) {
-                print STDERR "-- ERROR  Tested $tag$alg requesting $t cores and ${m}GB memory and found $cores could be used.\n";
+                print STDERR "-- DEBUG  Tested $tag$alg requesting $t cores and ${m}GB memory and found $cores could be used.\n";
             }
 
             #  If no cores, then all machines were too small.
-
             next if ($cores == 0);
 
             #  Save the best one seen so far.  Break ties by selecting the one with the most memory.
-
             if (($bestCores <  $cores) ||
                 ($bestCores <= $cores) && ($bestMemory > $memory)) {
                 $bestCores  = $cores;
-                $bestCoresT = $t;
-                $bestCoresM = $m;
+                $pickedThreads = $t;
+                $pickedMemory = $m;
             }
         }
     }
 
-    if (!defined($bestCoresM)) {
+    if (!defined($pickedMemory)) {
         getAllowedResources($tag, $alg, $err, $all, $uni, 1)  if (!defined($dbg));
 
         print STDERR "-- ERROR\n";
@@ -387,71 +397,64 @@ sub getAllowedResources ($$$$$@) {
         caExit("task $tag$alg failed to find a configuration to run on", undef);
     }
 
-    #  Reset the global values for later use.  SPECIAL CASE!  For ovsMemory, we just want the list
-    #  of valid memory sizes.
-
-    if ("$alg" eq "ovs") {
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    # Adjust the global values to the solution of the above optimization problem.
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    if ("$alg" eq "ovs") {#  SPECIAL CASE! For ovsMemory, we just want the list of valid memory sizes.
         $taskMemory  = $availMemoryMax;
-        $taskThreads = $bestCoresT;
+        $taskThreads = $pickedThreads;
 
         setGlobal("${tag}${alg}Memory",  "$availMemoryMin-$availMemoryMax");
         setGlobal("${tag}${alg}Threads",  $taskThreads);
-
-    } else {
-        $taskMemory  = $bestCoresM;
-        $taskThreads = $bestCoresT;
+    }
+    else {
+        $taskMemory  = $pickedMemory;
+        $taskThreads = $pickedThreads;
 
         setGlobal("${tag}${alg}Memory",  $taskMemory);
         setGlobal("${tag}${alg}Threads", $taskThreads);
     }
 
-    #  Check for stupidity.
-
+    #  Check for overflow.
     caExit("invalid taskMemory=$taskMemory; maxMemory=$maxMemory", undef)     if ($taskMemory  > $maxMemory);
     caExit("invalid taskThread=$taskThreads; maxThreads=$maxThreads", undef)  if ($taskThreads > $maxThreads);
 
-    #  Finally, reset the concurrency (if we're running locally) so we don't swamp our poor workstation.
-
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    #  Finally, reset the concurrency if we're running locally.
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     my $concurrent = undef;  #  Undef if in grid mode.
 
     if ($class eq "local") {
+        # pick the minimum of (threads/taskThread, memory/taskMemory)
         my $nct = ($taskThreads == 0) ? 1 : int($maxThreads / $taskThreads);
         my $ncm = ($taskMemory  == 0) ? 1 : int($maxMemory  / $taskMemory);
-
         my $nc  = ($nct < $ncm) ? $nct : $ncm;
 
         $nc = 1  if (($uni) && ($nc > 0));
 
-        #  If already set (on the command line), reset if too big.
-
-        if (getGlobal("${tag}${alg}Concurrency") > $nc) {
-            $err .= "-- Reset concurrency from " . getGlobal("${tag}${alg}Concurrency") . " to $nc.\n";
+        #  If not set, or set to zero, set it.
+        if (!defined(getGlobal("${tag}${alg}Concurrency")) || (getGlobal("${tag}${alg}Concurrency") == 0)) {
             setGlobal("${tag}${alg}Concurrency", $nc);
         }
-
-        #  If not set, or set but zero, set it.
-
-        if (!defined(getGlobal("${tag}${alg}Concurrency")) ||
-            (getGlobal("${tag}${alg}Concurrency") == 0)) {
+        elsif (getGlobal("${tag}${alg}Concurrency") > $nc) { # Reset if too big from cmd line options
+            $err .= "-- Reset concurrency from " . getGlobal("${tag}${alg}Concurrency") . " to $nc.\n";
             setGlobal("${tag}${alg}Concurrency", $nc);
         }
 
         #  But if no memory set, set concurrency to zero.
         #  This is mostly to get the report correct; if set to undef, we think this is a grid job.
-
         if ($taskMemory == 0) {
             setGlobal("${tag}${alg}Concurrency", 0);
         }
 
         #  Update the local variable for the report.
-
         $concurrent = getGlobal("${tag}${alg}Concurrency");
     }
 
-    #  And report.
-
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    #  And pretty report.
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     my $nam;
-
     if    ($alg eq "meryl")     {  $nam = "(k-mer counting)"; }
     elsif ($alg eq "hap")       {  $nam = "(read-to-haplotype assignment)"; }
     elsif ($alg eq "mhap")      {  $nam = "(overlap detection with mhap)"; }
@@ -486,7 +489,7 @@ sub getAllowedResources ($$$$$@) {
 
     my $t = substr("$tag$alg     ", 0, 7);
 
-    if (!defined($all)) {
+    if (!defined($all)) { # a little bit of formatting
         #$all .= "-- Memory, Threads and Concurrency configuration:\n"  if ( defined($concurrent));
         #$all .= "-- Memory and Threads configuration:\n"               if (!defined($concurrent));
 
@@ -510,7 +513,9 @@ sub getAllowedResources ($$$$$@) {
 }
 
 
-
+###############################################################################
+#  Trivia
+###############################################################################
 
 #  Converts number with units to gigabytes.  If no units, gigabytes is assumed.
 sub adjustMemoryValue ($) {
@@ -529,6 +534,7 @@ sub adjustMemoryValue ($) {
 }
 
 
+
 #  Converts gigabytes to number with units.
 sub displayMemoryValue ($) {
     my $val = shift @_;
@@ -538,6 +544,7 @@ sub displayMemoryValue ($) {
     return(($val)                      . "g")   if ($val < adjustMemoryValue("1t"));
     return(($val / 1024)               . "t");
 }
+
 
 
 #  Converts number with units to bases.
@@ -556,6 +563,7 @@ sub adjustGenomeSize ($) {
 }
 
 
+
 #  Converts bases to number with units.
 sub displayGenomeSize ($) {
     my $val = shift @_;
@@ -568,16 +576,16 @@ sub displayGenomeSize ($) {
 }
 
 
+###############################################################################
+# Main interface function
+###############################################################################
 
-
-
-#
 #  If minMemory or minThreads isn't defined, pick a reasonable pair based on genome size.
-#
-
 sub configureAssembler () {
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #  Parse units on things the user possibly set.
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setGlobal("genomeSize", adjustGenomeSize(getGlobal("genomeSize")));
 
@@ -585,6 +593,10 @@ sub configureAssembler () {
 
     setGlobal("minMemory",  adjustMemoryValue(getGlobal("minMemory")));
     setGlobal("maxMemory",  adjustMemoryValue(getGlobal("maxMemory")));
+
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    # setGlobalIfUndef of parameters and threads/memory for various stages
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     #  For overlapper and mhap, allow larger maximums for larger genomes.  More memory won't help
     #  smaller genomes, and the smaller minimums won't hurt larger genomes (which are probably being
@@ -627,7 +639,7 @@ sub configureAssembler () {
 
     my $hx = 1.25 * 1000000;
 
-    if      (getGlobal("genomeSize") < adjustGenomeSize("40m")) {
+    if (getGlobal("genomeSize") < adjustGenomeSize("40m")) {
         setGlobalIfUndef("corOvlHashBlockLength",     2500000);    setGlobalIfUndef("obtOvlHashBlockLength",    64 * $hx);    setGlobalIfUndef("utgOvlHashBlockLength",    64 * $hx);
         setGlobalIfUndef("corOvlRefBlockLength",      2000000);    setGlobalIfUndef("obtOvlRefBlockLength",   1000000000);    setGlobalIfUndef("utgOvlRefBlockLength",   1000000000);   #    1 Gbp
 
@@ -643,7 +655,8 @@ sub configureAssembler () {
         setGlobalIfUndef("obtMMapMemory", "4-6");    setGlobalIfUndef("obtMMapThreads", "1-16");
         setGlobalIfUndef("utgMMapMemory", "4-6");    setGlobalIfUndef("utgMMapThreads", "1-16");
 
-    } elsif (getGlobal("genomeSize") < adjustGenomeSize("500m")) {
+    }
+    elsif (getGlobal("genomeSize") < adjustGenomeSize("500m")) {
         setGlobalIfUndef("corOvlHashBlockLength",     2500000);    setGlobalIfUndef("obtOvlHashBlockLength",   128 * $hx);    setGlobalIfUndef("utgOvlHashBlockLength",   128 * $hx);
         setGlobalIfUndef("corOvlRefBlockLength",      2000000);    setGlobalIfUndef("obtOvlRefBlockLength",   5000000000);    setGlobalIfUndef("utgOvlRefBlockLength",   5000000000);   #    5 Gbp
 
@@ -659,7 +672,8 @@ sub configureAssembler () {
         setGlobalIfUndef("obtMMapMemory", "8-13");   setGlobalIfUndef("obtMMapThreads", "1-16");
         setGlobalIfUndef("utgMMapMemory", "8-13");   setGlobalIfUndef("utgMMapThreads", "1-16");
 
-    } elsif (getGlobal("genomeSize") < adjustGenomeSize("2g")) {
+    }
+    elsif (getGlobal("genomeSize") < adjustGenomeSize("2g")) {
         setGlobalIfUndef("corOvlHashBlockLength",     2500000);    setGlobalIfUndef("obtOvlHashBlockLength",   256 * $hx);    setGlobalIfUndef("utgOvlHashBlockLength",   256 * $hx);
         setGlobalIfUndef("corOvlRefBlockLength",      2000000);    setGlobalIfUndef("obtOvlRefBlockLength",  15000000000);    setGlobalIfUndef("utgOvlRefBlockLength",  15000000000);   #   15 Gbp
 
@@ -675,7 +689,8 @@ sub configureAssembler () {
         setGlobalIfUndef("obtMMapMemory", "16-32");  setGlobalIfUndef("obtMMapThreads", "1-16");
         setGlobalIfUndef("utgMMapMemory", "16-32");  setGlobalIfUndef("utgMMapThreads", "1-16");
 
-    } elsif (getGlobal("genomeSize") < adjustGenomeSize("5g")) {
+    }
+    elsif (getGlobal("genomeSize") < adjustGenomeSize("5g")) {
         setGlobalIfUndef("corOvlHashBlockLength",     2500000);    setGlobalIfUndef("obtOvlHashBlockLength",   512 * $hx);    setGlobalIfUndef("utgOvlHashBlockLength",   512 * $hx);
         setGlobalIfUndef("corOvlRefBlockLength",      2000000);    setGlobalIfUndef("obtOvlRefBlockLength",  20000000000);    setGlobalIfUndef("utgOvlRefBlockLength",  20000000000);   #   20 Gbp
 
@@ -691,7 +706,8 @@ sub configureAssembler () {
         setGlobalIfUndef("obtMMapMemory", "16-48");  setGlobalIfUndef("obtMMapThreads", "1-16");
         setGlobalIfUndef("utgMMapMemory", "16-48");  setGlobalIfUndef("utgMMapThreads", "1-16");
 
-    } else {
+    }
+    else {
         setGlobalIfUndef("corOvlHashBlockLength",     2500000);    setGlobalIfUndef("obtOvlHashBlockLength",   512 * $hx);    setGlobalIfUndef("utgOvlHashBlockLength",   512 * $hx);
         setGlobalIfUndef("corOvlRefBlockLength",      2000000);    setGlobalIfUndef("obtOvlRefBlockLength",  30000000000);    setGlobalIfUndef("utgOvlRefBlockLength",  30000000000);   #   30 Gbp
 
@@ -711,16 +727,17 @@ sub configureAssembler () {
     #  Overlap store construction should be based on the number of overlaps, but we obviously don't
     #  know that until much later.  If we set memory too large, we risk (in the parallel version for sure)
     #  inefficiency; too small and we run out of file handles.
-
-    if      (getGlobal("genomeSize") < adjustGenomeSize("300m")) {
+    if (getGlobal("genomeSize") < adjustGenomeSize("300m")) {
         setGlobalIfUndef("ovbMemory",   "4");       setGlobalIfUndef("ovbThreads",   "1");
         setGlobalIfUndef("ovsMemory",   "4-8");     setGlobalIfUndef("ovsThreads",   "1");
 
-    } elsif (getGlobal("genomeSize") < adjustGenomeSize("1g")) {
+    }
+    elsif (getGlobal("genomeSize") < adjustGenomeSize("1g")) {
         setGlobalIfUndef("ovbMemory",   "4");       setGlobalIfUndef("ovbThreads",   "1");
         setGlobalIfUndef("ovsMemory",   "8-16");    setGlobalIfUndef("ovsThreads",   "1");
 
-    } else {
+    }
+    else {
         setGlobalIfUndef("ovbMemory",   "4");       setGlobalIfUndef("ovbThreads",   "1");
         setGlobalIfUndef("ovsMemory",   "16-32");   setGlobalIfUndef("ovsThreads",   "1");
     }
@@ -729,49 +746,52 @@ sub configureAssembler () {
     #    Correction memory is set based on read length in CorrectReads.pm.
     #    Consensus memory is set based on tig size in Consensus.pm.
     #  Both are set to zero here, a special case that will configure only the thread component.
-
-    if      (getGlobal("genomeSize") < adjustGenomeSize("40m")) {
+    if (getGlobal("genomeSize") < adjustGenomeSize("40m")) {
         setGlobalIfUndef("cnsMemory",     "0");        setGlobalIfUndef("cnsThreads",      "1-4");
         setGlobalIfUndef("corMemory",     "8");        setGlobalIfUndef("corThreads",      "4");
         setGlobalIfUndef("cnsPartitions", "8");        setGlobalIfUndef("cnsPartitionMin", "15000");
         setGlobalIfUndef("corPartitions", "64");       setGlobalIfUndef("corPartitionMin", "10000");
 
-    } elsif (getGlobal("genomeSize") < adjustGenomeSize("1g")) {
+    }
+    elsif (getGlobal("genomeSize") < adjustGenomeSize("1g")) {
         setGlobalIfUndef("cnsMemory",     "0");        setGlobalIfUndef("cnsThreads",      "2-8");
         setGlobalIfUndef("corMemory",     "16");       setGlobalIfUndef("corThreads",      "4");
         setGlobalIfUndef("cnsPartitions", "64");       setGlobalIfUndef("cnsPartitionMin", "20000");
         setGlobalIfUndef("corPartitions", "128");      setGlobalIfUndef("corPartitionMin", "20000");
 
-    } else {
+    }
+    else {
         setGlobalIfUndef("cnsMemory",     "0");        setGlobalIfUndef("cnsThreads",      "2-8");
         setGlobalIfUndef("corMemory",     "24");       setGlobalIfUndef("corThreads",      "4");
         setGlobalIfUndef("cnsPartitions", "256");      setGlobalIfUndef("cnsPartitionMin", "25000");
         setGlobalIfUndef("corPartitions", "256");      setGlobalIfUndef("corPartitionMin", "40000");
     }
 
-    #  Meryl too, basically just small or big.  This should really be using the number of bases
-    #  reported from sqStore.
-
-    if      (getGlobal("genomeSize") < adjustGenomeSize("100m")) {
+    #  Meryl too, basically just small or big.
+    #  This should really be using the number of bases reported from sqStore.
+    if (getGlobal("genomeSize") < adjustGenomeSize("100m")) {
         setGlobalIfUndef("merylMemory", "4-12");        setGlobalIfUndef("merylThreads", "1-4");
 
-    } elsif (getGlobal("genomeSize") < adjustGenomeSize("1g")) {
+    }
+    elsif (getGlobal("genomeSize") < adjustGenomeSize("1g")) {
         setGlobalIfUndef("merylMemory", "12-24");       setGlobalIfUndef("merylThreads", "1-8");
 
-    } else {
+    }
+    else {
         setGlobalIfUndef("merylMemory", "24-64");       setGlobalIfUndef("merylThreads", "1-8");
     }
 
-    #  Total guesses on read-to-haplotype assignment.  A well-behaved nanopore human
-    #  was running in 2GB memory.
-
-    if      (getGlobal("genomeSize") < adjustGenomeSize("100m")) {
+    #  Total guesses on read-to-haplotype assignment.
+    #  A well-behaved nanopore human was running in 2GB memory.
+    if (getGlobal("genomeSize") < adjustGenomeSize("100m")) {
         setGlobalIfUndef("hapMemory", "4-8");     setGlobalIfUndef("hapThreads", "1-4");
 
-    } elsif (getGlobal("genomeSize") < adjustGenomeSize("1g")) {
+    }
+    elsif (getGlobal("genomeSize") < adjustGenomeSize("1g")) {
         setGlobalIfUndef("hapMemory", "6-12");    setGlobalIfUndef("hapThreads", "8-24");
 
-    } else {
+    }
+    else {
         setGlobalIfUndef("hapMemory", "8-16");    setGlobalIfUndef("hapThreads", "16-64");
     }
 
@@ -780,7 +800,8 @@ sub configureAssembler () {
         setGlobal("corOvlMerDistinct",  "0.9999")   if (!defined(getGlobal("corOvlMerThreshold")) && !defined(getGlobal("corOvlMerDistinct")));
         setGlobal("obtOvlMerDistinct",  "0.9999")   if (!defined(getGlobal("obtOvlMerThreshold")) && !defined(getGlobal("obtOvlMerDistinct")));
         setGlobal("utgOvlMerDistinct",  "0.9999")   if (!defined(getGlobal("utgOvlMerThreshold")) && !defined(getGlobal("utgOvlMerDistinct")));
-    } else {
+    }
+    else {
         setGlobal("corOvlMerDistinct",  "0.9990")   if (!defined(getGlobal("corOvlMerThreshold")) && !defined(getGlobal("corOvlMerDistinct")));
         setGlobal("obtOvlMerDistinct",  "0.9990")   if (!defined(getGlobal("obtOvlMerThreshold")) && !defined(getGlobal("obtOvlMerDistinct")));
         setGlobal("utgOvlMerDistinct",  "0.9990")   if (!defined(getGlobal("utgOvlMerThreshold")) && !defined(getGlobal("utgOvlMerDistinct")));
@@ -797,30 +818,34 @@ sub configureAssembler () {
     #
     #   On drosophila, with 270,000 reads (median len ~17,000bp), this will result in about  50 jobs.
     #   The memory-only limit generated 36 jobs.
-    #
+
     setGlobalIfUndef("redBatchSize",   undef);
     setGlobalIfUndef("redBatchLength", "500000000");
 
     setGlobalIfUndef("oeaBatchSize",   undef);
     setGlobalIfUndef("oeaBatchLength", "300000000");
 
-    if      (getGlobal("genomeSize") < adjustGenomeSize("40m")) {
-        setGlobalIfUndef("redMemory", "8-16");        setGlobalIfUndef("redThreads", "2-4");
-        setGlobalIfUndef("oeaMemory", "8");           setGlobalIfUndef("oeaThreads", "1");
+    if (getGlobal("genomeSize") < adjustGenomeSize("40m")) {
+        setGlobalIfUndef("redMemory", "4-16");        setGlobalIfUndef("redThreads", "2-4");
+        setGlobalIfUndef("oeaMemory", "4");           setGlobalIfUndef("oeaThreads", "1");
 
-    } elsif (getGlobal("genomeSize") < adjustGenomeSize("500m")) {
+    }
+    elsif (getGlobal("genomeSize") < adjustGenomeSize("500m")) {
         setGlobalIfUndef("redMemory", "8-16");        setGlobalIfUndef("redThreads", "4-6");
-        setGlobalIfUndef("oeaMemory", "8");           setGlobalIfUndef("oeaThreads", "1");
+        setGlobalIfUndef("oeaMemory", "4");           setGlobalIfUndef("oeaThreads", "1");
 
-    } elsif (getGlobal("genomeSize") < adjustGenomeSize("2g")) {
-        setGlobalIfUndef("redMemory", "16-32");       setGlobalIfUndef("redThreads", "4-8");
-        setGlobalIfUndef("oeaMemory", "8");           setGlobalIfUndef("oeaThreads", "1");
+    }
+    elsif (getGlobal("genomeSize") < adjustGenomeSize("2g")) {
+        setGlobalIfUndef("redMemory", "16-32");        setGlobalIfUndef("redThreads", "4-8");
+        setGlobalIfUndef("oeaMemory", "4");           setGlobalIfUndef("oeaThreads", "1");
 
-    } elsif (getGlobal("genomeSize") < adjustGenomeSize("5g")) {
+    }
+    elsif (getGlobal("genomeSize") < adjustGenomeSize("5g")) {
         setGlobalIfUndef("redMemory", "32-48");       setGlobalIfUndef("redThreads", "4-8");
         setGlobalIfUndef("oeaMemory", "8");           setGlobalIfUndef("oeaThreads", "1");
 
-    } else {
+    }
+    else {
         setGlobalIfUndef("redMemory", "32-64");       setGlobalIfUndef("redThreads", "6-10");
         setGlobalIfUndef("oeaMemory", "8");           setGlobalIfUndef("oeaThreads", "1");
     }
@@ -829,31 +854,35 @@ sub configureAssembler () {
     #
     #  GFA for genomes less than 40m is run in the canu process itself.
 
-    if      (getGlobal("genomeSize") < adjustGenomeSize("40m")) {
+    if (getGlobal("genomeSize") < adjustGenomeSize("40m")) {
         setGlobalIfUndef("batMemory", "4-16");        setGlobalIfUndef("batThreads", "2-4");
         setGlobalIfUndef("dbgMemory", "4-16");        setGlobalIfUndef("dbgThreads", "2-4");
 
         setGlobalIfUndef("gfaMemory", "4-16");         setGlobalIfUndef("gfaThreads", "1-4");
 
-    } elsif (getGlobal("genomeSize") < adjustGenomeSize("500m")) {
+    }
+    elsif (getGlobal("genomeSize") < adjustGenomeSize("500m")) {
         setGlobalIfUndef("batMemory", "16-64");       setGlobalIfUndef("batThreads", "2-8");
         setGlobalIfUndef("dbgMemory", "8-64");       setGlobalIfUndef("dbgThreads", "2-8");
 
         setGlobalIfUndef("gfaMemory", "8-16");         setGlobalIfUndef("gfaThreads", "2-8");
 
-    } elsif (getGlobal("genomeSize") < adjustGenomeSize("2g")) {
+    }
+    elsif (getGlobal("genomeSize") < adjustGenomeSize("2g")) {
         setGlobalIfUndef("batMemory", "32-256");      setGlobalIfUndef("batThreads", "4-16");
         setGlobalIfUndef("dbgMemory", "32-256");      setGlobalIfUndef("dbgThreads", "4-16");
 
         setGlobalIfUndef("gfaMemory", "16-32");        setGlobalIfUndef("gfaThreads", "4-16");
 
-    } elsif (getGlobal("genomeSize") < adjustGenomeSize("5g")) {
+    }
+    elsif (getGlobal("genomeSize") < adjustGenomeSize("5g")) {
         setGlobalIfUndef("batMemory", "128-512");     setGlobalIfUndef("batThreads", "8-32");
         setGlobalIfUndef("dbgMemory", "128-512");     setGlobalIfUndef("dbgThreads", "8-32");
 
         setGlobalIfUndef("gfaMemory", "32-64");       setGlobalIfUndef("gfaThreads", "8-32");
 
-    } else {
+    }
+    else {
         setGlobalIfUndef("batMemory", "256-1024");    setGlobalIfUndef("batThreads", "16-64");
         setGlobalIfUndef("dbgMemory", "128-1024");    setGlobalIfUndef("dbgThreads", "16-64");
 
@@ -861,14 +890,13 @@ sub configureAssembler () {
     }
 
 
-
-
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #  Finally, use all that setup to pick actual values for each component.
-    #
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+
     #  ovsMemory needs to be configured here iff the sequential build method is used.  This runs in
     #  the canu process, and needs to have a single memory size.  The parallel method will pick a
     #  memory size based on the number of overlaps and submit jobs using that size.
-
     my $err;
     my $all;
 
@@ -904,14 +932,12 @@ sub configureAssembler () {
     ($err, $all) = getAllowedResources("",    "gfa",       $err, $all, 1);
 
     #  Check some minimums.
-
     if ((getGlobal("ovsMemory") =~ m/^([0123456789.]+)-*[0123456789.]*$/) &&
         ($1 < 0.25)) {
         caExit("ovsMemory must be at least 0.25g or 256m", undef);
     }
 
     #  2017-02-21 -- not sure why $err is being reported here if it doesn't stop.  What's in it?
-
     print STDERR "--\n" if (defined($err));
     print STDERR $err   if (defined($err));
     print STDERR "--\n";
