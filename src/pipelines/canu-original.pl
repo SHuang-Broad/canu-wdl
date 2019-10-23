@@ -82,16 +82,6 @@ use canu::Grid_PBSTorque;
 use canu::Grid_LSF;
 use canu::Grid_DNANexus;
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-# Setting default option values.
-# Parsing CMD line specifications.
-# Parsing options from user specified file.
-# Then set parameters from the parsed CMD line specifications.
-# Relies on "Defaults.pm" for a lot of work.
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-
 my @specFiles;       #  Files of specs
 my @specOpts;        #  Command line specs
 my @inputFiles;      #  Command line inputs, later inputs in spec files are added
@@ -99,6 +89,7 @@ my @inputFiles;      #  Command line inputs, later inputs in spec files are adde
 my %haplotypeReads;  #  Inpout reads for haplotypes; each element is a NUL-delimited list of files
 
 #  Initialize our defaults.  Must be done before defaults are reported in printOptions() below.
+
 setDefaults();
 
 my $bin     = getBinDirectory();  #  Path to binaries, must be set after setDefaults().
@@ -110,12 +101,14 @@ my $asmAuto = undef;              #  If set, the name was auto-discovered.
 #  What a mess.  We can't set the version string until after we have a bin directory, and
 #  Defaults.pm can't call stuff in Execution.pm.  So, we need to special case setting the version
 #  string.
+
 setVersion($bin);
 
 #  Check for the presence of -option switches BEFORE we do any work.
 #  This lets us print the default values of options (which we don't do anymore, because
 #  too many are set later), and change the defaults (-fast and -slow) before
 #  other options are applied.
+
 if (scalar(@ARGV) == 0) {
     printHelp(1);
 }
@@ -166,31 +159,26 @@ my $step          = "run";
 while (scalar(@ARGV)) {
     my $arg = shift @ARGV;
 
-    if (($arg eq "-h") || ($arg eq "-help") || ($arg eq "--help")) {
+    if     (($arg eq "-h") || ($arg eq "-help") || ($arg eq "--help")) {
         printHelp(1);
 
-    }
-    elsif (($arg eq "-fast") ||
+    } elsif (($arg eq "-fast") ||
              ($arg eq "-accurate")) {
         addCommandLineOption($arg);
 
-    }
-    elsif (($arg eq "-citation") || ($arg eq "--citation")) {
+    } elsif (($arg eq "-citation") || ($arg eq "--citation")) {
         print STDERR "\n";
         printCitation(undef);
         exit(0);
 
-    }
-    elsif ($arg eq "-d") {
+    } elsif ($arg eq "-d") {
         $rootdir = shift @ARGV;
 
-    }
-    elsif ($arg eq "-p") {
+    } elsif ($arg eq "-p") {
         $asm = shift @ARGV;
         addCommandLineOption("-p '$asm'");
 
-    }
-    elsif ($arg eq "-s") {
+    } elsif ($arg eq "-s") {
         my $spec = shift @ARGV;
         $spec = abs_path($spec);
 
@@ -198,38 +186,31 @@ while (scalar(@ARGV)) {
 
         addCommandLineOption("-s '$spec'");
 
-    }
-    elsif ($arg eq "-haplotype") {
+    } elsif ($arg eq "-haplotype") {
         $mode = $step = "haplotype";
         addCommandLineOption("-haplotype");
 
-    }
-    elsif ($arg eq "-correct") {
+    } elsif ($arg eq "-correct") {
         $mode = $step = "correct";
         addCommandLineOption("-correct");
 
-    }
-    elsif ($arg eq "-trim") {
+    } elsif ($arg eq "-trim") {
         $mode = $step = "trim";
         addCommandLineOption("-trim");
 
-    }
-    elsif ($arg eq "-assemble") {
+    } elsif ($arg eq "-assemble") {
         $mode = $step = "assemble";
         addCommandLineOption("-assemble");
 
-    }
-    elsif ($arg eq "-trim-assemble") {
+    } elsif ($arg eq "-trim-assemble") {
         $mode = $step = "trim-assemble";
         addCommandLineOption("-trim-assemble");
 
-    }
-    elsif ($arg eq "-readdir") {
+    } elsif ($arg eq "-readdir") {
         $readdir = shift @ARGV;
         addCommandLineOption("-readdir '$readdir'");
 
-    }
-    elsif (($arg eq "-pacbio-raw")         ||  #  File handling is also present in Defaults.pm,
+    } elsif (($arg eq "-pacbio-raw")         ||  #  File handling is also present in Defaults.pm,
              ($arg eq "-pacbio-corrected")   ||  #  look for addSequenceFile().
              ($arg eq "-nanopore-raw")       ||
              ($arg eq "-nanopore-corrected") ||
@@ -237,10 +218,9 @@ while (scalar(@ARGV)) {
 
         my $file = $ARGV[0];
         my $fopt = addSequenceFile($readdir, $file, 1);
+
         while (defined($fopt)) {
-
             push @inputFiles, "$arg\0$fopt";
-
             addCommandLineOption("$arg '$fopt'");
 
             shift @ARGV;
@@ -249,16 +229,13 @@ while (scalar(@ARGV)) {
             $fopt = addSequenceFile($readdir, $file);
         }
 
-    }
-    elsif ($arg =~ m/^-haplotype(\w+)$/) {
-
-        my $hapname = $1;
-
+    } elsif ($arg =~ m/^-haplotype(\w+)$/) {
+        my $hapn = $1;
         my $file = $ARGV[0];
         my $fopt = addSequenceFile($readdir, $file, 1);
-        while (defined($fopt)) {
 
-            $haplotypeReads{$hapname} .= "$fopt\0";
+        while (defined($fopt)) {
+            $haplotypeReads{$hapn} .= "$fopt\0";
 
             addCommandLineOption("$arg '$fopt'");
 
@@ -268,22 +245,20 @@ while (scalar(@ARGV)) {
             $fopt = addSequenceFile($readdir, $file);
         }
 
-    }
-    elsif (-e $arg) {
+    } elsif (-e $arg) {
         addCommandLineError("ERROR:  File '$arg' supplied on command line, don't know what to do with it.\n");
 
-    }
-    elsif ($arg =~ m/=/) {
+    } elsif ($arg =~ m/=/) {
         push @specOpts, $arg;
         addCommandLineOption("'$arg'");
 
-    }
-    else {
+    } else {
         addCommandLineError("ERROR:  Invalid command line option '$arg'.  Did you forget quotes around options with spaces?\n");
     }
 }
 
 #  If no $asm or $dir, see if there is an assembly here.  If so, set $asm to what was found.
+
 if (!defined($asm)) {
     $asmAuto = 1;   #  If we don't actually find a prefix, we'll fail right after this, so OK to set blindly.
 
@@ -295,34 +270,33 @@ if (!defined($asm)) {
 }
 
 #  Fail if some obvious things aren't set.
+
 addCommandLineError("ERROR:  Assembly name prefix (-p) not supplied.\n")   if (!defined($asm));
 addCommandLineError("ERROR:  Assembly name prefix (-p) cannot contain the path delimiter '/'.\n")   if ($asm =~ m!/!);
 addCommandLineError("ERROR:  Assembly name prefix (-p) cannot contain spaces.\n")   if ($asm =~ m!\s!);
 
 #  Load paramters from the defaults files
+
 @inputFiles = setParametersFromFile("$bin/canu.defaults", $readdir, @inputFiles)   if (-e "$bin/canu.defaults");
 @inputFiles = setParametersFromFile("$ENV{'HOME'}/.canu", $readdir, @inputFiles)   if (-e "$ENV{'HOME'}/.canu");
 
 #  For each of the spec files, parse it, setting parameters and remembering any input files discovered.
+
 foreach my $specFile (@specFiles) {
     @inputFiles = setParametersFromFile($specFile, $readdir, @inputFiles);
 }
 
 #  Set parameters from the command line.
+
 setParametersFromCommandLine(@specOpts);
 
 #  If anything complained (invalid option, missing file, etc) printHelp() will trigger and exit.
-printHelp();
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-# Check runtime environment.
-# Relies on "Defaults.pm" for a lot of work.
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+printHelp();
 
 #  Now that we know the bin directory, print the version so those pesky users
 #  will (hopefully) include it when they paste in logs.
+
 print STDERR "-- " . getGlobal("version") . "\n";
 print STDERR "--\n";
 print STDERR "-- CITATIONS\n";
@@ -332,26 +306,19 @@ print STDERR "-- CONFIGURE CANU\n";
 print STDERR "--\n";
 
 #  Check java and gnuplot.
+
 checkJava();
 checkMinimap($bin);
 checkGnuplot();
 
 #  And one last chance to fail - because java and gnuplot both can set an error.
+
 printHelp();
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-# Detect computing environment.
-# Then configure appropriately.
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-
-#  Detect grid support.
-#  If 'gridEngine' isn't set, the execution methods
-#  submitScript() and submitOrRunParallelJob()
-#  will return without submitting, or run locally (respectively).
-#  This means that we can leave the default of 'useGrid' to 'true',
-#  and execution will do the right thing when there isn't a grid.
+#  Detect grid support.  If 'gridEngine' isn't set, the execution methods submitScript() and
+#  submitOrRunParallelJob() will return without submitting, or run locally (respectively).  This
+#  means that we can leave the default of 'useGrid' to 'true', and execution will do the right thing
+#  when there isn't a grid.
 
 print STDERR "-- Detected ", getNumberOfCPUs(), " CPUs and ", getPhysicalMemorySize(), " gigabytes of memory.\n";
 print STDERR "-- Limited to ", getGlobal("maxMemory"), " gigabytes from maxMemory option.\n"  if (defined(getGlobal("maxMemory")));
@@ -364,6 +331,7 @@ detectLSF();
 detectDNANexus();
 
 #  Report if no grid engine found, or if the user has disabled grid support.
+
 if (!defined(getGlobal("gridEngine"))) {
     print STDERR "-- No grid engine detected, grid disabled.\n";
 }
@@ -373,9 +341,9 @@ if ((getGlobal("useGrid") eq "0") && (defined(getGlobal("gridEngine")))) {
     setGlobal("gridEngine", undef);
 }
 
-#  Finish setting up the grid.
-#  This is done AFTER parameters are set from the command line,
-#  to let the user override any of our defaults.
+#  Finish setting up the grid.  This is done AFTER parameters are set from the command line, to
+#  let the user override any of our defaults.
+
 configureSGE();
 configureSlurm();
 configurePBSTorque();
@@ -384,30 +352,19 @@ configureRemote();
 configureCloud($asm, $rootdir);
 configureDNANexus();
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-# Configure the assembly pipeline (relies on "Configure.pm" for this).
-# Set working directory.
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-
 #  Set jobs sizes based on genomeSize and available hosts;
 #  Check that parameters (except error rates) are valid and consistent;
 #  Fail if any thing flagged an error condition;
+
 configureAssembler();  #  Set job sizes and etc bases on genomeSize and hosts available.
 checkParameters();     #  Check all parameters (except error rates) are valid and consistent.
 printHelp();           #  And one final last chance to fail.
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-# Final prep works.
-# Setup working directory & move there.
-#  Figure out read inputs.
-#  From an existing store?  From files?  Corrected?  Etc, etc.
-# Then set related algo. parameters accordingly.
-# Then create two sub-directories: "canu-logs" and "canu-scripts".
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#  Make space for us to work in, and move there.
+
+setWorkDirectory($asm, $rootdir);
+
+#  Figure out read inputs.  From an existing store?  From files?  Corrected?  Etc, etc.
 
 my $haveRaw          = 0;
 my $haveCorrected    = 0;
@@ -417,14 +374,13 @@ my $setUpForPacBio   = 0;
 my $setUpForNanopore = 0;
 my $setUpForHiFi     = 0;
 
-#  Make space for us to work in, and move there.
-setWorkDirectory($asm, $rootdir);
-
 #  If we're a cloud run, fetch the store.
+
 fetchSeqStore($asm);
 
-#  Scan for an existing seqStore and decide what reads and types are in it.
-#  This is pretty horrible and needs to be consolidated into a single report.
+#  Scan for an existing seqStore and decide what reads and types are in it.  This is
+#  pretty horrible and needs to be consolidated into a single report.
+
 my $nCor = getNumberOfReadsInStore($asm, "cor");   #  Number of raw reads ready for correction.
 my $nOBT = getNumberOfReadsInStore($asm, "obt");   #  Number of corrected reads ready for OBT.
 my $nAsm = getNumberOfReadsInStore($asm, "utg");   #  Number of trimmed reads ready for assembly.
@@ -432,6 +388,7 @@ my $nAsm = getNumberOfReadsInStore($asm, "utg");   #  Number of trimmed reads re
 #  If a seqStore was found, scan the reads in it to decide what we're working with.
 #  The sqStoreDumpMetaData here isn't used normally; it's only used when canu runs
 #  on a seqStore created by hand.
+
 if ($nCor + $nOBT + $nAsm > 0) {
     my $numPacBioRaw         = 0;
     my $numPacBioCorrected   = 0;
@@ -481,7 +438,9 @@ if ($nCor + $nOBT + $nAsm > 0) {
     print STDERR "--   Corrected:  $nOBT\n"   if ($haveHiFi == 0);
     print STDERR "--   Trimmed:    $nAsm\n";
 }
+
 #  Otherwise, scan input files, counting the different types of libraries we have.
+
 elsif (scalar(@inputFiles) > 0) {
     foreach my $typefile (@inputFiles) {
         my ($type, $file) = split '\0', $typefile;
@@ -517,13 +476,16 @@ elsif (scalar(@inputFiles) > 0) {
     print STDERR "--\n";
     print STDERR "-- Found $rt $ct reads in the input files.\n";
 }
+
 #  Otherwise, no reads found in a store, and no input files.
+
 else {
     caExit("ERROR: No reads supplied, and can't find any reads in any seqStore", undef);
 }
 
 #  Set an initial run mode, based on the libraries we have found, or the stores that exist (unless
 #  it was set on the command line).
+
 if (!defined($mode)) {
     $mode = "run"            if ($haveRaw       > 0);   #  If no seqStore, these are set based
     $mode = "trim-assemble"  if ($haveCorrected > 0);   #  on flags describing the input files.
@@ -536,6 +498,7 @@ if (!defined($mode)) {
 
 #  Set the type of the reads.  A command line option could force the type, e.g., "-pacbio" or
 #  "-nanopore", to let you do cRaZy stuff like "-nanopore -pacbio-raw *fastq".
+
 if (!defined($type)) {
     $type = "pacbio"        if ($setUpForPacBio   > 0);
     $type = "nanopore"      if ($setUpForNanopore > 0);
@@ -543,6 +506,7 @@ if (!defined($type)) {
 }
 
 #  Now set error rates (if not set already) based on the dominant read type.
+
 if ($type eq"pacbio") {
     setGlobalIfUndef("corOvlErrorRate",  0.240);
     setGlobalIfUndef("obtOvlErrorRate",  0.045);
@@ -574,9 +538,11 @@ if ($type eq"hifi") {
     setGlobalIfUndef("batOptions",       "-eg 0.0003 -dg 3 -db 3 -dr 1 -ca 50 -cp 5");
 }
 
+
 #  Check for a few errors:
 #    no mode                -> don't have any reads or any store to run from.
 #    both raw and corrected -> don't know how to process these
+
 caExit("ERROR: No reads supplied, and can't find any reads in any seqStore", undef)   if (!defined($mode));
 caExit("ERROR: Failed to determine the sequencing technology of the reads", undef)    if (!defined($type));
 
@@ -585,14 +551,8 @@ caExit("ERROR: Can't mix uncorrected and corrected reads", undef)               
 caExit("ERROR: Can't mix uncorrected and hifi reads", undef)                          if ($haveHiFi && $haveRaw);
 caExit("ERROR: Can't mix corrected and hifi reads", undef)                            if ($haveHiFi && $haveCorrected);
 
-#  Check that we were supplied a work directory, and that it exists, or we can create it.
-make_path("canu-logs")     if (! -d "canu-logs");
-make_path("canu-scripts")  if (! -d "canu-scripts");
+#  Go!
 
-#  This environment variable tells the binaries to log their execution in canu-logs/
-$ENV{'CANU_DIRECTORY'} = getcwd();
-
-#  Report the parameters used.
 printf STDERR "--\n";
 printf STDERR "-- Generating assembly '$asm' in '" . getcwd() . "'\n";
 printf STDERR "--\n";
@@ -611,27 +571,27 @@ printf STDERR "--    obtErrorRate    %6.4f (%6.2f%%)\n", getGlobal("obtErrorRate
 printf STDERR "--    utgErrorRate    %6.4f (%6.2f%%)\n", getGlobal("utgErrorRate"), getGlobal("utgErrorRate") * 100.0;
 printf STDERR "--    cnsErrorRate    %6.4f (%6.2f%%)\n", getGlobal("cnsErrorRate"), getGlobal("cnsErrorRate") * 100.0;
 
+#  Check that we were supplied a work directory, and that it exists, or we can create it.
+
+make_path("canu-logs")     if (! -d "canu-logs");
+make_path("canu-scripts")  if (! -d "canu-scripts");
+
+#  This environment variable tells the binaries to log their execution in canu-logs/
+
+$ENV{'CANU_DIRECTORY'} = getcwd();
+
 #  Report the parameters used.
+
 writeLog();
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#  Begin pipeline
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-# Utilities
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-
+#
 #  When doing 'run', this sets options for each stage.
 #    - overlapper 'mhap' for correction, 'ovl' for trimming and assembly.
 #    - consensus 'falconpipe' for correction, 'utgcns' for assembly.  No consensus in trimming.
 #    - errorRates 15% for correction and 2% for trimming and assembly.  Internally, this is
 #      multiplied by three for obt, ovl, cns, etc.
 #
+
 sub setOptions ($$) {
     my $mode = shift @_;  #  E.g,. "run" or "trim-assemble" or just plain ol' "trim"
     my $step = shift @_;  #  Step we're setting options for.
@@ -660,7 +620,10 @@ sub setOptions ($$) {
     return($step);
 }
 
+#
 #  Pipeline piece
+#
+
 sub overlap ($$) {
     my $asm  = shift @_;
     my $tag  = shift @_;
@@ -685,16 +648,12 @@ sub overlap ($$) {
     createOverlapStore($asm, $tag);
 }
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-# Trio-binning reads
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#
+#  Begin pipeline
+#
 
-# if trio-binning is requested and hasn't finished sucessfully,
-# rely on subroutines defined in canu::HaplotypeReads for working,
-#  and on submitScript defined in canu::Execution for submission
 my @haplotypes = sort keys %haplotypeReads;
+
 if ((scalar(@haplotypes) > 0) &&
     (setOptions($mode, "haplotype") eq "haplotype")) {
     if ((! -e "./haplotype/haplotyping.success") &&
@@ -718,16 +677,11 @@ if ((scalar(@haplotypes) > 0) &&
     }
 }
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-# Haplotype-aware assembly
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-
 #  If haplotype reads exist, bootstrap the assemblies.
 #
 #  I tried to use submitScript() to launch these, but that didn't work
 #  so nicely - if not on grid, it wouldn't do anything.
+
 if (haplotypeReadsExist($asm, @haplotypes) eq "yes") {
     my $techtype = removeHaplotypeOptions();
     my @options  = getCommandLineOptions();
@@ -741,8 +695,8 @@ if (haplotypeReadsExist($asm, @haplotypes) eq "yes") {
         $displLen = ($displLen < $hapLen) ? $hapLen : $displLen;
     }
 
-    #  Decide if we should use or ignore the unassigned reads,
-    #  and if we should even bother assembling.
+    #  Decide if we should use or ignore the unassigned reads, and if we should
+    #  even bother assembling.
 
     fetchFile("");
 
@@ -783,8 +737,7 @@ if (haplotypeReadsExist($asm, @haplotypes) eq "yes") {
     if ($withUnknown == 0) {
         print STDERR "--\n";
         print STDERR "-- Fewer than " . $unknownFraction*100 . " % of bases in unassigned reads; don't use them in assemblies.\n";
-    }
-    else {
+    } else {
         print STDERR "--\n";
         print STDERR "-- More than " .  $unknownFraction*100 . " % of bases in unassigned reads; including them in assemblies.\n";
     }
@@ -840,6 +793,7 @@ if (haplotypeReadsExist($asm, @haplotypes) eq "yes") {
         print STDERR "-- ERROR:  No reads assigned to haplotypes.  Assemblies not started.\n";
         print STDERR "-- ERROR:\n";
     }
+
     elsif ($hapBases{"unknown"} / $totBases > 0.50) {
         print STDERR "--\n";
         print STDERR "-- ERROR:\n";
@@ -849,12 +803,16 @@ if (haplotypeReadsExist($asm, @haplotypes) eq "yes") {
         print STDERR "-- ERROR:  are included in ALL assemblies.\n";
         print STDERR "-- ERROR:\n";
     }
+
     #  Or stop if we're not running assemblies.
+
     elsif (setOptions($mode, "run") ne "run") {
         print STDERR "--\n";
         print STDERR "-- Assemblies not started per '-haplotype' option.\n";
     }
+
     #  Or run the assemblies.
+
     else {
         print STDERR "--\n";
 
@@ -878,16 +836,13 @@ if (haplotypeReadsExist($asm, @haplotypes) eq "yes") {
     }
 
     #  And now we're done.
+
     print STDERR "--\n";
     print STDERR "-- Bye.\n";
+
     exit(0);
 }
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-# Correct reads
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 if (setOptions($mode, "correct") eq "correct") {
     if ((getNumberOfBasesInStore($asm, "obt") == 0) &&
         (! fileExists("$asm.correctedReads.fasta.gz")) &&
@@ -924,11 +879,6 @@ if (setOptions($mode, "correct") eq "correct") {
 
 dumpCorrectedReads($asm);
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-# Trim corrected reads
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 if ((setOptions($mode, "trim") eq "trim") &&
     (getGlobal("unitigger") ne "wtdbg")) {
     if ((getNumberOfBasesInStore($asm, "utg") == 0) &&
@@ -959,11 +909,6 @@ if ((setOptions($mode, "trim") eq "trim") &&
 
 dumpTrimmedReads ($asm);
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-# Assemble analysis-ready reads
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 if (setOptions($mode, "assemble") eq "assemble") {
     if ((! fileExists("$asm.contigs.fasta")) &&
         (! fileExists("$asm.contigs.fastq"))) {
@@ -1013,11 +958,7 @@ if (setOptions($mode, "assemble") eq "assemble") {
     }
 }
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-# User-supplied termination command.
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#  User-supplied termination command.
 
 if (defined(getGlobal("onSuccess"))) {
     print STDERR "--\n";
@@ -1025,11 +966,7 @@ if (defined(getGlobal("onSuccess"))) {
     runCommand(getGlobal("onExitDir"), getGlobal("onSuccess") . " $asm");
 }
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-# Done done.
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+
 print STDERR "--\n";
 print STDERR "-- Bye.\n";
 
