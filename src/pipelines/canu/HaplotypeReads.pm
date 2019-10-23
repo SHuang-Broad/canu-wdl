@@ -54,6 +54,7 @@ use warnings "all";
 no  warnings "uninitialized";
 
 use File::Path 2.08 qw(make_path remove_tree);
+use POSIX qw(ceil);
 
 use canu::Defaults;
 use canu::Execution;
@@ -64,75 +65,67 @@ use canu::Report;
 
 use canu::Grid_Cloud;
 
-use POSIX qw(ceil);
+###############################################################################
 
-
-
+# Check if haplotype reads already exist, i.e. child read already assigned (bug: currently don't check that it was successful)
 sub haplotypeReadsExist ($@) {
     my $asm            = shift @_;
     my @haplotypes     =       @_;
 
-    #  If no haplotypes, no haplotype reads exist.  Of note, this string causes the canu
-    #  main to skip all haplotype processing.
-
+    #  If no haplotypes, no haplotype reads exist.
     if (scalar(@haplotypes) == 0){
         return("no-haplotypes");
     }
 
     #  Check for each file, failing if any one doesn't exist.
-
     foreach my $haplotype (@haplotypes) {
         return("no")   if (! fileExists("./haplotype/haplotype-$haplotype.fasta.gz"));
     }
 
     #  Yeah!  Reads exist!
-
     return("yes");
 }
 
-
-
+# Re-partition parental (short) reads into chunks (chunk size an arbitrary constant)
+# private method, used in haplotypeCountConfigure($%)
 sub haplotypeSplitReads ($$%) {
     my $asm            = shift @_;
     my $merSize        = shift @_;
     my %haplotypeReads =       @_;
+
     my $bin            = getBinDirectory();
     my $cmd;
     my $path           = "haplotype/0-kmers";
 
     my @haplotypes     = keys %haplotypeReads;
 
-    #
-    #  Check if we're already split.
-    #
-
+    #  Check if all have been done (return if true)
     my $splitNeeded = 0;
-
     foreach my $haplotype (@haplotypes) {
         $splitNeeded = 1   if (! fileExists("$path/reads-$haplotype/reads-$haplotype.success"));
     }
-
     return   if ($splitNeeded == 0);
 
-    #
-    #  Blindly split each file into 100 Mbp chunks.
-    #    !00x of a 150 Mbp genome ->  150 files.
-    #    100x of a   3 Gbp genome -> 3000 files.
-    #
 
+    #  Blindly split each file into 100 Mbp chunks.
+    #    100x of a 150 Mbp genome ->  150 files.
+    #    100x of a   3 Gbp genome -> 3000 files.
     foreach my $haplotype (@haplotypes) {
         my @readFiles     = split '\0', $haplotypeReads{$haplotype};
         my $fileNumber    = "001";
         my $fileLength    = 0;
-        my $fileLengthMax = 100000000;
+        my $fileLengthMax = 100000000; # 100 M
 
-        next  if (fileExists("$path/reads-$haplotype/reads-$haplotype.success"));
+        next  if (fileExists("$path/reads-$haplotype/reads-$haplotype.success")); # only work on necessities
 
         make_path("$path/reads-$haplotype")  if (! -d "$path/reads-$haplotype");
 
         print STDERR "--\n";
         print STDERR "--  Split haplotype reads for '$haplotype' into multiple files.\n";
         print STDERR "--   --> '$path/reads-$haplotype/reads-$haplotype-$fileNumber.fasta.gz'.\n";
+
+        #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+        # begin writing fasta
         open(OUT, "| gzip -1c > $path/reads-$haplotype/reads-$haplotype-$fileNumber.fasta.gz");
 
         foreach my $file (@readFiles) {
@@ -197,18 +190,28 @@ sub haplotypeSplitReads ($$%) {
 
         close(OUT);
         stashFile("$path/reads-$haplotype/reads-$haplotype-$fileNumber.fasta.gz");
+        # finish writing fasta
+        #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
+        #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
         open(OUT, "> $path/reads-$haplotype/reads-$haplotype.success");
         print OUT "$fileLengthMax\n";    #  Not really used
         print OUT "$fileNumber\n";       #
         close(OUT);
-
         stashFile("$path/reads-$haplotype/reads-$haplotype.success");
+        #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     }
 }
 
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#  meryl-count
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
-
+# Main function of this module. Three functionalities:
+#   * finish-up the meta-programming generated shell script "meryl-count.sh" (by Execution.pm), by
+#
+#   * generate "meryl-count.memory" to be used
+#   * generate "meryl-merge.sh" & "meryl-subtract.sh"
 sub haplotypeCountConfigure ($%) {
     my $asm            = shift @_;
     my %haplotypeReads =       @_;
@@ -224,28 +227,24 @@ sub haplotypeCountConfigure ($%) {
 
     make_path($path)  if (! -d $path);
 
-    #
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #  Pick an appropriate mer size based on genome size.
-    #
-
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     my $genomeSize = getGlobal("genomeSize");
     my $erate      = 0.001;
     my $merSize    = int(ceil(log($genomeSize * (1 - $erate) / $erate) / log(4)));
 
-
-    #
-    #  Split reads if we need to.
-    #
-
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    #  Re-partition parental reads if we need to.
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     haplotypeSplitReads($asm, $merSize, %haplotypeReads);
 
-    #
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #  Figure out what files meryl needs to count
-    #
-
-    my %merylInputs;
-    my %merylFiles;
-    my $totalFiles;
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    my %merylInputs;      # per haplotype
+    my %merylFilesCount;  # per haplotype
+    my $totalFilesCount;
 
     print STDERR "--\n";
 
@@ -255,19 +254,20 @@ sub haplotypeCountConfigure ($%) {
 
         while (fileExists("$path/reads-$haplotype/reads-$haplotype-$fileNumber.fasta.gz")) {
             $merylInputs{$haplotype} .= "$haplotype-$fileNumber\0";
-            $merylFiles{$haplotype}++;
+            $merylFilesCount{$haplotype}++;
 
-            $totalFiles++;
+            $totalFilesCount++;
 
             $fileNumber++;
         }
 
-        print STDERR "-- haplotype $haplotype has $merylFiles{$haplotype} input files.\n";
+        print STDERR "-- haplotype $haplotype has $merylFilesCount{$haplotype} input files.\n";
     }
 
-    #
-    #  Figure out batch sizes for meryl.   - the number of jobs per haplotype.
-    #
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    #  Figure out batch sizes for meryl-count.
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+
     #  -- Up to  5 files/job with  2 jobs ->   10 files.
     #  -- Up to  8 files/job with  4 jobs ->   32 files.
     #  -- Up to 11 files/job with  6 jobs ->   66 files.
@@ -304,46 +304,42 @@ sub haplotypeCountConfigure ($%) {
 
     my $nFilesPerJob = 5;
     my $nJobsMax     = scalar(@haplotypes);
-
     #print STDERR "-- Up to $nFilesPerJob files/job with $nJobsMax jobs -> ", $nFilesPerJob * $nJobsMax, " files.\n";
-
-    while ($nFilesPerJob * $nJobsMax < $totalFiles) {
+    while ($nFilesPerJob * $nJobsMax < $totalFilesCount) {
         $nFilesPerJob += 3;
         $nJobsMax     += scalar(@haplotypes);
-
         #print STDERR "-- Up to $nFilesPerJob files/job with $nJobsMax jobs -> ", $nFilesPerJob * $nJobsMax, " files.\n";
     }
-
     print STDERR "-- Will use $nJobsMax jobs with up to $nFilesPerJob files each.\n";
 
-    #
-    #  Assign read files to jobs.  Divide the files for each haplotype into groups
-    #  of some size, taking care to not mix up files between haplotypes!
-    #
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    #  Build batches, i.e. assign read files to jobs.
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
-    my @merylInputs;             #  A list of the inputs to each counting job.
-    my @merylOutputs;            #  The output of each counting job.
-    my %merylJobsPerHaplotype;   #  The number of counting jobs for each haplotype.
+    my @merylInputs;             #  A list of the inputs to each counting batch/job.
+    my @merylOutputs;            #  The output of each counting batch/job.
+    my %merylJobsPerHaplotype;   #  The array of batch/job number for each haplotype.
 
+    #  Divide the files for each haplotype into groups of some size,
+    #  taking care to not mix up files between haplotypes!
     my $jid = "001";
+    foreach my $haplotype (@haplotypes) { # iterate over haplotypes/parents
+        my @haplotypeFiles    = split '\0', $merylInputs{$haplotype};
+        my $haplotypeFilesCnt =             $merylFilesCount{$haplotype};
 
-    foreach my $haplotype (@haplotypes) {
-        my @files  = split '\0', $merylInputs{$haplotype};
-        my $nFiles =             $merylFiles{$haplotype};
-
-        while (scalar(@files) > 0) {
+        while (scalar(@haplotypeFiles) > 0) { # iterate over input files from this haplotype/parent
             my $files = undef;
 
-            for (my $n=0; $n<$nFilesPerJob; $n++) {
-                last   if (!defined($files[0]));
+            for (my $n=0; $n<$nFilesPerJob; $n++) { # one batch
+                last   if (!defined($haplotypeFiles[0]));
 
                 if (! defined($files)) {
-                    $files  = "  batch=\"./reads-$haplotype/reads-$files[0].fasta.gz \\\n";
+                    $files  = "  batch=\"./reads-$haplotype/reads-$haplotypeFiles[0].fasta.gz \\\n";
                 } else {
-                    $files .= "         ./reads-$haplotype/reads-$files[0].fasta.gz \\\n";
+                    $files .= "         ./reads-$haplotype/reads-$haplotypeFiles[0].fasta.gz \\\n";
                 }
 
-                shift @files;
+                shift @haplotypeFiles;
             }
 
             $files =~ s/gz\s\\\n$/gz"/;   #  Remove the " \" at the end of the string, and add a terminating quote.
@@ -361,7 +357,10 @@ sub haplotypeCountConfigure ($%) {
         }
     }
 
-    #
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    #  Decide memory requirement
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+
     #  Memory requirements are dependent only on $nFilesPerJob...unless you
     #  change the size of each file, so don't do that!  Well, OK, and merSize.
     #
@@ -376,7 +375,6 @@ sub haplotypeCountConfigure ($%) {
     #  request, and tell meryl the smaller size.  So if we do screw up the
     #  300 MB per 100 Mb claim, meryl itself will dump partial results and
     #  merge at the end.
-    #
 
     my $thr = getGlobal("merylThreads");
     my $mem = 2 + ceil(0.333 * $nFilesPerJob + 0.5);
@@ -387,14 +385,13 @@ sub haplotypeCountConfigure ($%) {
     stashFile("$path/meryl-count.memory");
 
     $mem = 1.0 + 0.333 * $nFilesPerJob;
-
-    #
-    #  Make a script for counting.  All the counting jobs are the same, no need to
-    #  distinguish between haplotypes here.
-    #
-
     setGlobal("merylMemory", $mem);
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    #  Generate "meryl-count.sh"
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+
+    #  All the counting jobs are the same, no need to distinguish between haplotypes here.
     open(F, "> $path/meryl-count.sh") or caExit("can't open '$path/meryl-count.sh' for writing: $!", undef);
     print F "#!" . getGlobal("shell") . "\n";
     print F "\n";
@@ -405,8 +402,8 @@ sub haplotypeCountConfigure ($%) {
     print F getJobIDShellCode();
     print F "\n";
 
+    # This generates the batch definition codes in "meryl-count.sh" (loooooooong)
     my $nJobs = scalar(@merylInputs);
-
     for (my $JJ=1; $JJ <= $nJobs; $JJ++) {
         print F "if [ \$jobid -eq $JJ ] ; then\n";
         print F "$merylInputs[$JJ-1]\n";
@@ -473,10 +470,10 @@ sub haplotypeCountConfigure ($%) {
     makeExecutable("$path/meryl-count.sh");
     stashFile("$path/meryl-count.sh");
 
-    #
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #  Emit a script for merging all batches in each haplotype.  Unlike counting,
     #  we definitely need to take the haplotype the job is for into consideration.
-    #
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     open(F, "> $path/meryl-merge.sh") or caExit("can't open '$path/meryl-count.sh' for writing: $!", undef);
     print F "#!" . getGlobal("shell") . "\n";
@@ -489,7 +486,6 @@ sub haplotypeCountConfigure ($%) {
     print F "\n";
 
     $nJobs = scalar(@haplotypes);
-
     for (my $JJ=1; $JJ <= $nJobs; $JJ++) {           #  Set the name of the haplotype this job
         my $hap = $haplotypes[$JJ-1];                #  is merging kmers for.
 
@@ -560,9 +556,9 @@ sub haplotypeCountConfigure ($%) {
     makeExecutable("$path/meryl-merge.sh");
     stashFile("$path/meryl-merge.sh");
 
-    #
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #  Emit a script for subtracting haplotypes from each other.
-    #
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     open(F, "> $path/meryl-subtract.sh") or caExit("can't open '$path/meryl-count.sh' for writing: $!", undef);
     print F "#!" . getGlobal("shell") . "\n";
@@ -654,8 +650,7 @@ sub haplotypeCountConfigure ($%) {
     stopAfter("meryl-configure");
 }
 
-
-
+# check that all jobs are executed successfully (retry if necessary)
 sub haplotypeCountCheck ($) {
     my $asm        = shift @_;
     my $attempt    = getGlobal("canuIteration");
@@ -665,16 +660,12 @@ sub haplotypeCountCheck ($) {
     my $bin        = getBinDirectory();
     my $cmd;
 
-    #  Check if we're known to be done.
-
+    #  Check it has already been successful
     goto allDone      if (fileExists("$path/meryl-count.success"));
 
     #  Scan the script to determine how many jobs there are.
-
-    fetchFile("$path/meryl-count.sh");
-
     my @jobs;
-
+    fetchFile("$path/meryl-count.sh");
     open(F, "< $path/meryl-count.sh") or caExit("can't open '$path/meryl-count.sh' for reading: $!", undef);
     while (<F>) {
         if (m/output="(.*-\d+)"$/) {
@@ -682,17 +673,14 @@ sub haplotypeCountCheck ($) {
         }
     }
     close(F);
-
     caExit("failed to find the number of jobs in '$path/meryl-count.sh'", undef)  if (scalar(@jobs) == 0);
 
-    #  Figure out if all the tasks finished correctly.
-
-    my $currentJobID = 1;
-
+    #  Figure out which tasks succeeded/failed.
     my @successJobs;
     my @failedJobs;
     my $failureMessage = "";
 
+    my $currentJobID = 1;
     foreach my $job (@jobs) {
         if ((fileExists("$path/reads-$job.meryl")) ||
             (fileExists("$path/reads-$job.meryl.tar.gz"))) {
@@ -707,11 +695,9 @@ sub haplotypeCountCheck ($) {
     }
 
     #  Failed jobs, retry.
-
     if (scalar(@failedJobs) > 0) {
 
         #  If too many attempts, give up.
-
         if ($attempt >= getGlobal("canuIterationMax")) {
             print STDERR "--\n";
             print STDERR "-- Kmer counting (meryl-count) jobs failed, tried $attempt times, giving up.\n";
@@ -720,6 +706,7 @@ sub haplotypeCountCheck ($) {
             caExit(undef, undef);
         }
 
+        #  Otherwise, run some jobs.
         if ($attempt > 0) {
             print STDERR "--\n";
             print STDERR "-- Kmer counting (meryl-count) jobs failed, retry.\n";
@@ -727,15 +714,11 @@ sub haplotypeCountCheck ($) {
             print STDERR "--\n";
         }
 
-        #  Otherwise, run some jobs.
-
         generateReport($asm);
 
         #  One off hack for setting memory here
-
-        fetchFile("$path/meryl-count.memory");
-
         my $mem = 0;
+        fetchFile("$path/meryl-count.memory"); # file generated in `haplotypeCountConfigure`
         open(F, "< $path/meryl-count.memory") or caExit("can't open '$path/meryl-count.memory' for reading: $!", undef);
         $mem = <F>;  chomp $mem;
         close(F);
@@ -743,19 +726,16 @@ sub haplotypeCountCheck ($) {
         setGlobal("merylMemory", $mem);
 
         #  And _now_ run some jobs.
-
         submitOrRunParallelJob($asm, "meryl", $path, "meryl-count", @failedJobs);
         return;
     }
 
-  finishStage:
+  finishStage: # report how many counting jobs finished, generate success file
     print STDERR "-- Found ", scalar(@successJobs), " Kmer counting (meryl-count) outputs.\n";
 
     make_path($path);   #  With object storage, we might not have this directory!
-
     open(F, "> $path/meryl-count.success") or caExit("can't open '$path/meryl-count.success' for writing: $!", undef);
     close(F);
-
     stashFile("$path/meryl-count.success");
 
     generateReport($asm);
@@ -765,7 +745,9 @@ sub haplotypeCountCheck ($) {
     stopAfter("meryl-count");
 }
 
-
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#  meryl-merge & -subtract
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
 sub haplotypeMergeCheck ($@) {
     my $asm        = shift @_;
@@ -778,20 +760,18 @@ sub haplotypeMergeCheck ($@) {
     my $cmd;
 
     #  Check if we're known to be done.
-
     goto allDone      if (fileExists("$path/meryl-merge.success"));
 
     fetchFile("$path/meryl-merge.sh");
 
-    #  Figure out if all the tasks finished correctly.  Usually we need to scan the script
-    #  to decide how many jobs, but here we just know that there is one job per haplotype.
-
-    my $currentJobID = 1;
-
+    #  Figure out if all the tasks finished correctly.
     my @successJobs;
     my @failedJobs;
     my $failureMessage = "";
 
+    # Usually we need to scan the script to decide how many jobs,
+    # but here we just know that there is one job per haplotype.
+    my $currentJobID = 1;
     foreach my $hap (@haplotypes) {
         if ((fileExists("$path/reads-$hap.meryl")) ||
             (fileExists("$path/reads-$hap.meryl.tar.gz"))) {
@@ -806,11 +786,9 @@ sub haplotypeMergeCheck ($@) {
     }
 
     #  Failed jobs, retry.
-
     if (scalar(@failedJobs) > 0) {
 
         #  If too many attempts, give up.
-
         if ($attempt >= getGlobal("canuIterationMax")) {
             print STDERR "--\n";
             print STDERR "-- Kmer counting (meryl-merge) jobs failed, tried $attempt times, giving up.\n";
@@ -827,7 +805,6 @@ sub haplotypeMergeCheck ($@) {
         }
 
         #  Otherwise, run some jobs.
-
         generateReport($asm);
 
         submitOrRunParallelJob($asm, "meryl", $path, "meryl-merge", @failedJobs);
@@ -838,10 +815,8 @@ sub haplotypeMergeCheck ($@) {
     print STDERR "-- Found ", scalar(@successJobs), " Kmer counting (meryl-merge) outputs.\n";
 
     make_path($path);   #  With object storage, we might not have this directory!
-
     open(F, "> $path/meryl-merge.success") or caExit("can't open '$path/meryl-merge.success' for writing: $!", undef);
     close(F);
-
     stashFile("$path/meryl-merge.success");
 
     generateReport($asm);
@@ -850,7 +825,6 @@ sub haplotypeMergeCheck ($@) {
   allDone:
     stopAfter("meryl-merge");
 }
-
 
 
 sub haplotypeSubtractCheck ($@) {
@@ -864,14 +838,12 @@ sub haplotypeSubtractCheck ($@) {
     my $cmd;
 
     #  Check if we're known to be done.
-
     goto allDone      if (fileExists("$path/meryl-subtract.success"));
 
     fetchFile("$path/meryl-subtract.sh");
 
     #  Figure out if all the tasks finished correctly.  Usually we need to scan the script
     #  to decide how many jobs, but here we just know that there is one job per haplotype.
-
     my $currentJobID = 1;
 
     my @successJobs;
@@ -892,11 +864,9 @@ sub haplotypeSubtractCheck ($@) {
     }
 
     #  Failed jobs, retry.
-
     if (scalar(@failedJobs) > 0) {
 
         #  If too many attempts, give up.
-
         if ($attempt >= getGlobal("canuIterationMax")) {
             print STDERR "--\n";
             print STDERR "-- Kmer counting (meryl-subtract) jobs failed, tried $attempt times, giving up.\n";
@@ -913,7 +883,6 @@ sub haplotypeSubtractCheck ($@) {
         }
 
         #  Otherwise, run some jobs.
-
         generateReport($asm);
 
         submitOrRunParallelJob($asm, "meryl", $path, "meryl-subtract", @failedJobs);
@@ -924,19 +893,15 @@ sub haplotypeSubtractCheck ($@) {
     print STDERR "-- Found ", scalar(@successJobs), " Kmer counting (meryl-subtract) outputs.\n";
 
     make_path($path);   #  With object storage, we might not have this directory!
-
     open(F, "> $path/meryl-subtract.success") or caExit("can't open '$path/meryl-subtract.success' for writing: $!", undef);
     close(F);
-
     stashFile("$path/meryl-subtract.success");
 
     generateReport($asm);
     resetIteration("haplotype-merylSubtractCheck");
 
     #  Remove databases.
-
     print STDERR "--\n";
-
     foreach my $hap (@haplotypes) {
         if (getGlobal("saveMerCounts") == 0) {
             print STDERR "-- Removing meryl database '$path/reads-$hap.meryl'.\n";
@@ -950,7 +915,9 @@ sub haplotypeSubtractCheck ($@) {
     stopAfter("meryl-subtract");
 }
 
-
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#  chil read assignment
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
 sub haplotypeReadsConfigure ($@) {
     my $asm            = shift @_;
@@ -965,17 +932,15 @@ sub haplotypeReadsConfigure ($@) {
     make_path($path)  if (! -d $path);
 
     #  Canu helpfully prefixes each read with the technology type.  Strip that off.
-
     my @inputs;
 
     foreach my $in (@$inputFiles) {
         push @inputs, (split '\0', $in)[1];
     }
 
-    #  Dump the script.
-
-    my $mem = getGlobal("hapMemory");
-    my $thr = getGlobal("hapThreads");
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    #  Meta-generate the shell script
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     open(F, "> $path/splitHaplotype.sh") or caExit("can't open '$path/splitHaplotype.sh' for writing: $!", undef);
     print F "#!" . getGlobal("shell") . "\n";
@@ -1023,7 +988,6 @@ sub haplotypeReadsConfigure ($@) {
 
     #  Fetch the reads from the object store.
     #  A similar blcok is used in SequenceStore.pm and HaplotypeReads.pm (twice).
-
     if (defined(getGlobal("objectStore"))) {
         print F "\n";
         print F "#\n";
@@ -1045,6 +1009,8 @@ sub haplotypeReadsConfigure ($@) {
     }
 
     my $minReadLength = getGlobal("minReadLength");
+    my $thr = getGlobal("hapThreads");
+    my $mem = getGlobal("hapMemory");
 
     print F "\n";
     print F "#  Assign reads to haplotypes.\n";
@@ -1084,7 +1050,6 @@ sub haplotypeReadsConfigure ($@) {
 }
 
 
-
 sub haplotypeReadsCheck ($@) {
     my $asm        = shift @_;
     my @haplotypes =       @_;
@@ -1096,21 +1061,20 @@ sub haplotypeReadsCheck ($@) {
     my $cmd;
 
     #  Check if we're known to be done.
-
     goto allDone      if (fileExists("$path/haplotyping.success"));
 
     fetchFile("$path/splitHaplotype.sh");
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #  Determine how many jobs we ran.  Usually we need to scan the script to decide how many jobs,
     #  but here we just know that there is exatly one job.  We'll still pretend there are multiple
     #  jobs, just in case someone later implements that.
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     my @jobs;
-
     push @jobs, "1";
 
     #  Figure out if all the tasks finished correctly.
-
     my $currentJobID = 1;
 
     my @successJobs;
@@ -1130,11 +1094,9 @@ sub haplotypeReadsCheck ($@) {
     }
 
     #  Failed jobs, retry.
-
     if (scalar(@failedJobs) > 0) {
 
         #  If too many attempts, give up.
-
         if ($attempt >= getGlobal("canuIterationMax")) {
             print STDERR "--\n";
             print STDERR "-- Haplotyping jobs failed, tried $attempt times, giving up.\n";
@@ -1151,7 +1113,6 @@ sub haplotypeReadsCheck ($@) {
         }
 
         #  Otherwise, run some jobs.
-
         generateReport($asm);
 
         submitOrRunParallelJob($asm, "hap", $path, "splitHaplotype", @failedJobs);
