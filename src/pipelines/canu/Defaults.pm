@@ -40,7 +40,29 @@ package canu::Defaults;
 require Exporter;
 
 @ISA    = qw(Exporter);
-@EXPORT = qw(getCommandLineOptions addCommandLineOption removeHaplotypeOptions addCommandLineError writeLog getNumberOfCPUs getPhysicalMemorySize diskSpace printOptions printHelp printCitation addSequenceFile setParametersFromFile setParametersFromCommandLine checkJava checkMinimap checkGnuplot checkParameters getGlobal setGlobal setGlobalIfUndef setDefaults setVersion);
+@EXPORT = qw(getCommandLineOptions
+             addCommandLineOption
+             removeHaplotypeOptions
+             addCommandLineError
+             writeLog
+             getNumberOfCPUs
+             getPhysicalMemorySize
+             diskSpace
+             printOptions
+             printHelp
+             printCitation
+             addSequenceFile
+             setParametersFromFile
+             setParametersFromCommandLine
+             checkJava
+             checkMinimap
+             checkGnuplot
+             checkParameters
+             getGlobal
+             setGlobal
+             setGlobalIfUndef
+             setDefaults
+             setVersion);
 
 use strict;
 use warnings "all";
@@ -58,6 +80,8 @@ my %synnam;    #  Parameter name (beacuse the key is lowercase)
 
 my @cLineOpts;
 my $specLog   = "";
+
+###############################################################################
 
 
 
@@ -82,6 +106,7 @@ sub getGlobal ($) {
 }
 
 
+
 sub setGlobalSpecialization ($@) {
     my $val = shift @_;
 
@@ -91,6 +116,7 @@ sub setGlobalSpecialization ($@) {
 
     return(1);
 }
+
 
 
 sub setGlobal ($$) {
@@ -282,12 +308,10 @@ sub writeLog () {
     close(F);
 }
 
-
-
-#
+###############################################################################
 #  Host management - these really belong in 'Execution.pm' (or 'Utilities.pm') but can't go there
 #  (Execution.pm) and be used here too.
-#
+###############################################################################
 
 sub getNumberOfCPUs () {
     my $os   = $^O;
@@ -309,6 +333,7 @@ sub getNumberOfCPUs () {
 
     return($ncpu);
 }
+
 
 
 sub getPhysicalMemorySize () {
@@ -363,6 +388,7 @@ sub diskSpace ($) {
 }
 
 
+
 sub printOptions () {
     my $pretty = 0;
 
@@ -385,6 +411,7 @@ sub printOptions () {
         print "$o$u\n";
     }
 }
+
 
 
 sub printHelp (@) {
@@ -472,6 +499,7 @@ sub printHelp (@) {
 
     exit(1);
 }
+
 
 
 sub printCitation ($) {
@@ -723,25 +751,28 @@ sub setParametersFromCommandLine(@) {
 }
 
 
-
+# sets
+# Memory, Threads, StageSpace and Concurrency
+# of a specific: 1) stage with 2) description to
+# `undef` (yes, all four)
 sub setExecDefaults ($$) {
     my $tag         = shift @_;
-    my $name        = shift @_;
+    my $description = shift @_;
 
     $global{"gridOptions${tag}"}   = undef;
-    $synops{"gridOptions${tag}"}   = "Grid engine options applied to $name jobs";
+    $synops{"gridOptions${tag}"}   = "Grid engine options applied to $description jobs";
 
     $global{"${tag}Memory"}        = undef;
-    $synops{"${tag}Memory"}        = "Amount of memory, in gigabytes, to use for $name jobs";
+    $synops{"${tag}Memory"}        = "Amount of memory, in gigabytes, to use for $description jobs";
 
     $global{"${tag}Threads"}       = undef;
-    $synops{"${tag}Threads"}       = "Number of threads to use for $name jobs";
+    $synops{"${tag}Threads"}       = "Number of threads to use for $description jobs";
 
     $global{"${tag}StageSpace"}    = undef;
-    $synops{"${tag}StageSpace"}    = "Amount of local disk space needed to stage data for $name jobs";
+    $synops{"${tag}StageSpace"}    = "Amount of local disk space needed to stage data for $description jobs";
 
     $global{"${tag}Concurrency"}   = undef;
-    $synops{"${tag}Concurrency"}   = "If grid not enabled, number of $name jobs to run at the same time; default is n_proc / n_threads";
+    $synops{"${tag}Concurrency"}   = "If grid not enabled, number of $description jobs to run at the same time; default is n_proc / n_threads";
 }
 
 
@@ -810,11 +841,11 @@ sub setDefault ($$$) {
     $synops{$var} = $description;
 }
 
-
-
 sub setDefaults () {
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Internal stuff
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     $global{"errors"}                      = undef;   #  Command line errors
     $global{"version"}                     = undef;   #  Reset at the end of this function, once we know where binaries are.
@@ -826,12 +857,16 @@ sub setDefaults () {
     $global{"onexitdir"}                   = undef;   #  Copy of $wrk, for caExit() and caFailure() ONLY.
     $global{"onexitnam"}                   = undef;   #  Copy of $asm, for caExit() and caFailure() ONLY.
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Meta options (no $global for these, only synopsis), more of these, many many more, are defined in setOverlapDefaults().
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     $synops{"rawErrorRate"}                = "Expected fraction error in an alignment of two uncorrected reads";
     $synops{"correctedErrorRate"}          = "Expected fraction error in an alignment of two corrected reads";
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  General Configuration Options (aka miscellany)
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     my $java = (exists $ENV{"JAVA_HOME"} && -e "$ENV{'JAVA_HOME'}/bin/java") ? "$ENV{'JAVA_HOME'}/bin/java" : "java";
 
@@ -849,7 +884,9 @@ sub setDefaults () {
     setDefault("stageDirectory",      undef,      "If set, copy heavily used data to this node-local location");
     setDefault("preExec",             undef,      "A command line to run at the start of Canu execution scripts");
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Cleanup and Termination options
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setDefault("saveOverlaps",        0,         "Do not remove the overlap stores.  Default: false = remove overlap stores when they're no longer needed");
     setDefault("purgeOverlaps",       "normal",  "When to delete intermediate overlap files: never, normal (default), aggressive, dangerous");
@@ -860,7 +897,9 @@ sub setDefaults () {
     setDefault("onSuccess",           undef,     "Full path to command to run on successful completion");
     setDefault("onFailure",           undef,     "Full path to command to run on failure");
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Error Rates
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setDefault("corOvlErrorRate",     undef, "Overlaps above this error rate are not computed");
     setDefault("obtOvlErrorRate",     undef, "Overlaps at or below this error rate are used to trim reads");
@@ -872,7 +911,9 @@ sub setDefaults () {
     setDefault("corErrorRate",        undef, "Only use raw alignments below this error rate to construct corrected reads");
     setDefault("cnsErrorRate",        undef, "Consensus expects alignments at about this error rate");
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Minimums and maximums
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setDefault("minReadLength",        1000,      "Reads shorter than this length are not loaded into the assembler; default 1000");
     setDefault("minOverlapLength",     500,       "Overlaps shorter than this length are not computed; default 500");
@@ -886,13 +927,17 @@ sub setDefaults () {
     setDefault("minThreads",           undef,     "Minimum number of compute threads suggested to compute the assembly");
     setDefault("maxThreads",           undef,     "Maximum number of compute threads to use by any component of the assembler");
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Stopping conditions
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setDefault("stopOnReadQuality", 1,     "Stop if a significant portion of the input data has quality value or base composition errors");
     setDefault("stopOnLowCoverage", 10,    "Stop if raw, corrected or trimmed read coverage is low");
     setDefault("stopAfter",         undef, "Stop after a specific algorithm step is completed");
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Grid Engine configuration, internal parameters.  These are filled out in canu.pl, right after this function returns.
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setDefault("gridEngine",                          undef, "Grid engine configuration, not documented");
     setDefault("gridEngineSubmitCommand",             undef, "Grid engine configuration, not documented");
@@ -911,7 +956,9 @@ sub setDefaults () {
     setDefault("gridEngineArraySubmitID",             undef, "Grid engine configuration, not documented");
     setDefault("gridEngineJobID",                     undef, "Grid engine configuration, not documented");
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Grid Engine Pipeline
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setDefault("useGrid", 1, "If 'true', enable grid-based execution; if 'false', run all jobs on the local machine; if 'remote', create jobs for grid execution but do not submit; default 'true'");
 
@@ -919,13 +966,17 @@ sub setDefaults () {
         setDefault("useGrid$c", 1, "If 'true', run module $c under grid control; if 'false' run locally.");
     }
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Grid Engine configuration, for each step of the pipeline
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setDefault("gridOptions",           undef,  "Grid engine options applied to all jobs");
     setDefault("gridOptionsExecutive",  undef,  "Grid engine options applied to the canu executive script");
     setDefault("gridOptionsJobName",    undef,  "Grid jobs job-name suffix");
 
-    #####  Grid Engine configuration and parameters, for each step of the pipeline (memory, threads)
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    #####  Grid Engine configuration and parameters, for each step of the pipeline (Memory, Threads, StageSpace and Concurrency)
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setExecDefaults("meryl",     "mer counting");
     setExecDefaults("hap",       "haplotype assignment");
@@ -953,7 +1004,9 @@ sub setDefaults () {
     setExecDefaults("cns",       "unitig consensus");
     setExecDefaults("gfa",       "graph alignment and processing");
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Object Storage
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setDefault("objectStore",          undef,  "Type of object storage used; not ready for production yet");
     setDefault("objectStoreClient",    undef,  "Path to the command line client used to access the object storage");
@@ -962,35 +1015,47 @@ sub setDefaults () {
     setDefault("objectStoreNameSpace", undef,  "Object store parameters; specific to the type of objectStore used");
     setDefault("objectStoreProject",   undef,  "Object store project; specific to the type of objectStore used");
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Overlapper
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setOverlapDefaults("cor", "correction",             "mhap");  #  Overlaps computed for correction
     setOverlapDefaults("obt", "overlap based trimming", "ovl");   #  Overlaps computed for trimming
     setOverlapDefaults("utg", "unitig construction",    "ovl");   #  Overlaps computed for unitigging
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     ##### Overlap Store
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     #  ovbMemory and ovsMemory are set above.
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Executive
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setDefault("executiveMemory",   4,   "Amount of memory, in GB, to reserve for the Canu exective process");
     setDefault("executiveThreads",  1,   "Number of threads to reserve for the Canu exective process");
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Mers
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setDefault("merylMemory",      undef,  "Amount of memory, in gigabytes, to use for mer counting");
     setDefault("merylThreads",     undef,  "Number of threads to use for mer counting");
     setDefault("merylConcurrency", undef,  "Unused, there is only one process");
 
-    #####  Haplotyping
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    #####  TrioBinning
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setDefault("hapUnknownFraction", 0.05,   "Fraction of allowed unknown bases before they are included in the assembly, between 0-1; default 0.05");
     setDefault("hapMemory",          undef,  "Amount of memory, in gigabytes, to use for haplotype assignment");
     setDefault("hapThreads",         undef,  "Number of threads to use for haplotype assignment");
     setDefault("hapConcurrency",     undef,  "Unused, there is only one process");
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Overlap Based Trimming
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setDefault("obtErrorRate",       undef, "Stringency of overlaps to use for trimming");
     setDefault("trimReadsOverlap",   500,   "Minimum overlap between evidence to make contiguous trim; default '500'");
@@ -999,7 +1064,9 @@ sub setDefaults () {
     #$global{"splitReads..."}               = 1;
     #$synops{"splitReads..."}               = "";
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Fragment/Overlap Error Correction
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setDefault("enableOEA",      1,     "Do overlap error adjustment - comprises two steps: read error detection (RED) and overlap error adjustment (OEA); default 'true'");
     setDefault("redBatchSize",   undef, "Number of reads per fragment error detection batch");
@@ -1007,7 +1074,9 @@ sub setDefaults () {
     setDefault("oeaBatchSize",   undef, "Number of reads per overlap error correction batch");
     setDefault("oeaBatchLength", undef, "Number of bases per overlap error correction batch");
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Unitigger & BOG & bogart Options
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setDefault("unitigger",      "bogart", "Which unitig algorithm to use; 'bogart' or 'wtdbg' supported; default 'bogart'");
     setDefault("genomeSize",     undef, "An estimate of the size of the genome");
@@ -1022,14 +1091,18 @@ sub setDefaults () {
 
     setDefault("contigFilter",   "2 0 1.0 0.5 3",   "Parameters to filter out 'unassembled' unitigs.  Five values: minReads minLength singleReadSpan lowCovFraction lowCovDepth");
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Consensus Options
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setDefault("cnsPartitions",   undef,       "Partition consensus into N jobs");
     setDefault("cnsPartitionMin", undef,       "Don't make a consensus partition with fewer than N reads");
     setDefault("cnsMaxCoverage",  40,          "Limit unitig consensus to at most this coverage; default '0' = unlimited");
     setDefault("cnsConsensus",    "pbdagcon",  "Which consensus algorithm to use; 'pbdagcon' (fast, reliable); 'utgcns' (multialignment output); 'quick' (single read mosaic); default 'pbdagcon'");
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Correction Options
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     setDefault("corPartitions",                undef,        "Partition read correction into N jobs");
     setDefault("corPartitionMin",              undef,        "Don't make a read correction partition with fewer than N reads");
@@ -1043,7 +1116,6 @@ sub setDefaults () {
     setDefault("corConsensus",                 "falcon",     "Which consensus algorithm to use; only 'falcon' is supported; default 'falcon'");
 
     #  Convert all the keys to lowercase, and remember the case-sensitive version
-
     foreach my $k (keys %synops) {
         (my $l = $k) =~ tr/A-Z/a-z/;
 
@@ -1058,7 +1130,6 @@ sub setDefaults () {
 }
 
 
-#  Get the version information.
 
 sub setVersion ($) {
     my $bin    = shift @_;
@@ -1072,6 +1143,7 @@ sub setVersion ($) {
 
     $global{'version'} = $version;
 }
+
 
 
 sub checkJava () {
@@ -1320,18 +1392,16 @@ sub checkGnuplot () {
 
 sub checkParameters () {
 
-    #
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #  Fiddle with filenames to make them absolute paths.
-    #
-
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     makeAbsolute("corOvlFrequentMers");
     makeAbsolute("obtOvlFrequentMers");
     makeAbsolute("utgOvlFrequentMers");
 
-    #
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #  Adjust case on some of them
-    #
-
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     fixCase("corOverlapper");
     fixCase("obtOverlapper");
     fixCase("utgOverlapper");
@@ -1344,21 +1414,17 @@ sub checkParameters () {
     fixCase("unitigger");
     fixCase("stopAfter");
 
-    #
-    #  Well, crud.  'gridEngine' and 'objectStore' want to be uppercase, not lowercase like
-    #  fixCase() would do.
-    #
-
+    #  Well, crud. 'gridEngine' and 'objectStore' want to be uppercase,
+    #  not lowercase like fixCase() would do.
     $global{"gridengine"}  =~ tr/a-z/A-Z/;  #  NOTE: lowercase 'gridengine'
     $global{"objectstore"} =~ tr/a-z/A-Z/;  #  NOTE: lowercase 'objectstore'
 
-    #
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #  Check for inconsistent parameters
-    #
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
-    #  Genome size isn't properly decoded until later, but we want to fail quickly.  So, just test if
-    #  a unitless number is supplied, and if that number is tiny.
-
+    #  Genome size isn't properly decoded until later, but we want to fail quickly.
+    #  So, just test if a unitless number is supplied, and if that number is tiny.
     {
         my $gs = getGlobal("genomeSize");
 
@@ -1374,12 +1440,10 @@ sub checkParameters () {
         }
     }
 
-    #
-    #  If we're running as a job array, unset the ID of the job array.  This screws
-    #  up our scheduling, as our jobs think they're running in a task array.
+    #  If we're running as a job array, unset the ID of the job array.
+    #  This screws up our scheduling, as our jobs think they're running in a task array.
     #
     #  Silly SGE sets this to 'undefined' for normal jobs.
-    #
 
     if (exists($ENV{getGlobal("gridEngineTaskID")})) {
         my $ja = $ENV{getGlobal("gridEngineTaskID")};
@@ -1477,9 +1541,9 @@ sub checkParameters () {
         }
     }
 
-    #
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #  Check for invalid usage
-    #
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     foreach my $tag ("cor", "obt", "utg") {
         if ((getGlobal("${tag}Overlapper") ne "mhap") &&
@@ -1517,7 +1581,6 @@ sub checkParameters () {
         addCommandLineError("ERROR:  Invalid 'cnsConsensus' specified (" . getGlobal("cnsConsensus") . "); must be 'quick', 'pbdagcon', or 'utgcns'\n");
     }
 
-
     if ((!defined("lowCoverageAllowed") &&  defined("lowCoverageDepth")) ||
         ( defined("lowCoverageAllowed") && !defined("lowCoverageDepth"))) {
         addCommandLineError("ERROR:  Invalid 'lowCoverageAllowed' and 'lowCoverageDepth' specified; both must be set\n");
@@ -1528,12 +1591,10 @@ sub checkParameters () {
         addCommandLineError("ERROR:  Invalid 'saveOverlaps' specified (" . getGlobal("saveOverlaps") . "); must be 'true' or 'false'\n");
     }
 
-
     if (getGlobal("purgeOverlaps") eq "0") {
         setGlobal("purgeOverlaps", "never");
     }
-
-    if (getGlobal("purgeOverlaps") eq "1") {
+    elsif (getGlobal("purgeOverlaps") eq "1") {
         setGlobal("purgeOverlaps", "normal");
     }
 
@@ -1550,7 +1611,6 @@ sub checkParameters () {
         addCommandLineError("ERROR:  Invalid 'corFilter' specified (" . getGlobal("corFilter") . "); must be 'none' or 'quick' or 'expensive'\n");
     }
 
-
     if ((getGlobal("useGrid") ne "0") &&
         (getGlobal("useGrid") ne "1") &&
         (getGlobal("useGrid") ne "remote")) {
@@ -1563,7 +1623,7 @@ sub checkParameters () {
         my $st = getGlobal("stopAfter");
         $st =~ tr/A-Z/a-z/;
 
-        $st = "correctiom"   if ($st eq "readcorrection");    #  Update the string to allow deprecated usage.
+        $st = "correction"   if ($st eq "readcorrection");    #  Update the string to allow deprecated usage.
         $st = "trimming"     if ($st eq "readtrimming");
 
         my $failureString = "ERROR:  Invalid stopAfter specified (" . getGlobal("stopAfter") . "); must be one of:\n";
@@ -1616,6 +1676,7 @@ sub checkParameters () {
         addCommandLineError("contigFilter 'lowCovDepth' must be a positive integer, currently $v[4]\n")       if (($v[4] < 0) || ($v[4] !~ m/^[0-9]+$/));
     }
 }
+
 
 
 1;
