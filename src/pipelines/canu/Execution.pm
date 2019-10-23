@@ -91,12 +91,9 @@ use File::Spec;
 
 use canu::Defaults;
 
-
-
-
+###############################################################################
 
 #  Log that we've finished a task.
-
 sub logFinished ($$) {
     my $dir       = shift @_;
     my $startsecs = shift @_;
@@ -141,22 +138,28 @@ sub logFinished ($$) {
     print STDERR "----------------------------------------\n";
 }
 
+###############################################################################
+#  Functions for running multiple processes at the same time.
+#  This is private to the module.
+###############################################################################
 
-
-#
-#  Functions for running multiple processes at the same time.  This is private to the module.
-#
-
-my $numberOfProcesses       = 0;     #  Number of jobs concurrently running
-my $numberOfProcessesToWait = 0;     #  Number of jobs we can leave running at exit
-my @processQueue            = ();
-my @processesRunning        = ();
+# not exposed, not changed at all
 my $printProcessCommand     = 1;     #  Show commands as they run
+my $numberOfProcessesToWait = 0;     #  Number of jobs we can leave running at exit
 
+# practically static after initialization
+my $numberOfProcesses       = 0;     #  Number of jobs concurrently running
+my @processQueue            = ();
+
+# dynamic arrays
+my @processesRunning        = ();
+
+# Simply set $numberOfProcesses to provided value
 sub schedulerSetNumberOfProcesses {
     $numberOfProcesses = shift @_;
 }
 
+# Given a cmd to run, push it to @processQueue
 sub schedulerSubmit ($) {
     my $cmd = shift @_;
 
@@ -170,14 +173,12 @@ sub schedulerForkProcess ($) {
     my $pid;
 
     #  From Programming Perl, page 167
-  FORK: {
+    FORK: {
       if ($pid = fork) {
           # Parent
-          #
           return($pid);
       } elsif (defined $pid) {
           # Child
-          #
           exec($process);
       } elsif ($! =~ /No more processes/) {
           # EAGIN, supposedly a recoverable fork error
@@ -203,7 +204,6 @@ sub schedulerRun () {
     my @running;
 
     #  Reap any processes that have finished
-
     foreach my $i (@processesRunning) {
         push @running, $i  if (schedulerReapProcess($i) == 0);
     }
@@ -211,7 +211,6 @@ sub schedulerRun () {
     @processesRunning = @running;
 
     #  Run processes in any available slots
-
     while ((scalar(@processesRunning) < $numberOfProcesses) &&
            (scalar(@processQueue) > 0)) {
         my $process = shift @processQueue;
@@ -223,32 +222,33 @@ sub schedulerRun () {
 sub schedulerFinish ($$) {
     my $dir = shift @_;
     my $nam = shift @_;
-    my $child;
-    my @newProcesses;
-    my $remain;
 
-    $remain = scalar(@processQueue);
+    my $child;
+    my $num_remain;
+
+    $num_remain = scalar(@processQueue);
 
     my $startsecs = time();
     my $diskfree  = (defined($dir)) ? (diskSpace($dir)) : (0);
 
     print STDERR "----------------------------------------\n";
-    print STDERR "-- Starting '$nam' concurrent execution on ", scalar(localtime()), " with $diskfree GB free disk space ($remain processes; $numberOfProcesses concurrently)\n"  if  (defined($dir));
-    print STDERR "-- Starting '$nam' concurrent execution on ", scalar(localtime()), " ($remain processes; $numberOfProcesses concurrently)\n"                                    if (!defined($dir));
+    print STDERR "-- Starting '$nam' concurrent execution on ", scalar(localtime()), " with $diskfree GB free disk space ($num_remain processes; $numberOfProcesses concurrently)\n"  if  (defined($dir));
+    print STDERR "-- Starting '$nam' concurrent execution on ", scalar(localtime()), " ($num_remain processes; $numberOfProcesses concurrently)\n"                                    if (!defined($dir));
     print STDERR "\n";
     print STDERR "    cd $dir\n";
 
     my $cwd = getcwd();  #  Remember where we are.
-    chdir($dir);        #  So we can root the jobs in the correct location.
+    chdir($dir);         #  So we can root the jobs in the correct location.
 
     #  Run all submitted jobs
-    #
-    while ($remain > 0) {
+    my @newProcesses;
+    while ($num_remain > 0) {
+
         schedulerRun();
 
-        $remain = scalar(@processQueue);
+        $num_remain = scalar(@processQueue);
 
-        if ($remain > 0) {
+        if ($num_remain > 0) {
             $child = waitpid -1, 0;
 
             undef @newProcesses;
@@ -261,21 +261,18 @@ sub schedulerFinish ($$) {
     }
 
     #  Wait for them to finish, if requested
-    #
     while (scalar(@processesRunning) > $numberOfProcessesToWait) {
         waitpid(shift @processesRunning, 0);
     }
 
     logFinished($dir, $startsecs);
 
-    chdir($cwd);
+    chdir($cwd);         # and then go back
 }
 
-
-
-#
+###############################################################################
 #  File Management
-#
+###############################################################################
 
 sub touch ($@) {
     open(F, "> $_[0]") or caFailure("failed to touch file '$_[0]'", undef);
@@ -283,18 +280,15 @@ sub touch ($@) {
     close(F);
 }
 
-
-
 sub makeExecutable ($) {
     my $file = shift @_;
 
     chmod(0755 & ~umask(), $file);
 }
 
-
-#
+###############################################################################
 #  State management
-#
+###############################################################################
 
 sub stopAfter ($) {
     my $stopAfter = shift @_;
@@ -317,7 +311,6 @@ sub resetIteration ($) {
 
     setGlobal("canuIteration", 0);
 }
-
 
 
 #  Decide what bin directory to use.
@@ -354,8 +347,9 @@ sub getJobIDShellCode () {
     my $string;
     my $taskenv = getGlobal('gridEngineTaskID');
 
-    $string .= "#  Discover the job ID to run, from either a grid environment variable and a\n";
-    $string .= "#  command line offset, or directly from the command line.\n";
+    $string .= "#  Discover the job ID to run, from\n";
+    $string .= "#    * either a grid environment variable and command line offset,\n";
+    $string .= "#    * or directly from the command line.\n";
     $string .= "#\n";
     $string .= "if [ x\$$taskenv = x -o x\$$taskenv = xundefined -o x\$$taskenv = x0 ]; then\n";
     $string .= "  baseid=\$1\n";           #  Off grid
@@ -364,12 +358,12 @@ sub getJobIDShellCode () {
     $string .= "  baseid=\$$taskenv\n";    #  On Grid
     $string .= "  offset=\$1\n";
     $string .= "fi\n";
-    $string .= "if [ x\$offset = x ]; then\n";
-    $string .= "  offset=0\n";
-    $string .= "fi\n";
     $string .= "if [ x\$baseid = x ]; then\n";
     $string .= "  echo Error: I need $taskenv set, or a job index on the command line.\n";
     $string .= "  exit\n";
+    $string .= "fi\n";
+    $string .= "if [ x\$offset = x ]; then\n";
+    $string .= "  offset=0\n";
     $string .= "fi\n";
     $string .= "jobid=`expr -- \$baseid + \$offset`\n";
     $string .= "if [ x\$$taskenv = x ]; then\n";
@@ -377,6 +371,8 @@ sub getJobIDShellCode () {
     $string .= "else\n";
     $string .= "  echo Running job \$jobid based on $taskenv=\$$taskenv and offset=\$offset.\n";
     $string .= "fi\n";
+
+    return ($string);
 }
 
 
@@ -434,15 +430,13 @@ sub getBinDirectory () {
 }
 
 
-#  Emits a block of shell code to locate binaries during shell scripts.  See comments on
-#  getBinDirectory.
-#
+#  Emits a block of shell code to locate binaries during shell scripts.
+#  See comments on getBinDirectory.
 sub getBinDirectoryShellCode () {
     my $installDir = getInstallDirectory();
     my $string;
 
     #  First, run any preExec command that might exist.
-
     if (defined(getGlobal("preExec"))) {
         $string .= "#  Pre-execution commands.\n";
         $string .= "\n";
@@ -451,7 +445,6 @@ sub getBinDirectoryShellCode () {
     }
 
     #  Then, setup and report paths.
-
     my $javaPath = getGlobal("java");
     my $canu     = "\$bin/" . basename($0);
 
@@ -497,10 +490,7 @@ sub getBinDirectoryShellCode () {
     return($string);
 }
 
-
-
-
-#
+###############################################################################
 #  If running on a cloud system, shell scripts are started in some random location.
 #  setWorkDirectory() will create the directory the script is supposed to run in (e.g.,
 #  correction/0-mercounts) and move into it.  This will keep the scripts compatible with the way
@@ -509,7 +499,7 @@ sub getBinDirectoryShellCode () {
 #  If you're fine running in 'some random location' do nothing here.
 #
 #  Note that canu does minimal cleanup.
-#
+###############################################################################
 
 sub setWorkDirectory ($$) {
     my $asm     = shift @_;
@@ -552,12 +542,11 @@ sub setWorkDirectory ($$) {
 }
 
 
-
 sub setWorkDirectoryShellCode ($) {
     my $path = shift @_;
     my $code = "";
 
-    if    (getGlobal("objectStore") eq "TEST") {
+    if (getGlobal("objectStore") eq "TEST") {
         $code .= "if [ z\$SGE_TASK_ID != z ] ; then\n";
         $code .= "  jid=\$JOB_ID\n";
         $code .= "  tid=\$SGE_TASK_ID\n";
@@ -568,12 +557,10 @@ sub setWorkDirectoryShellCode ($) {
         $code .= "  fi\n";
         $code .= "fi\n";
     }
-
     elsif (getGlobal("objectStore") eq "DNANEXUS") {
         #  You're probably fine running in some random location, but if there is faster disk
         #  available, move there.
     }
-
     elsif (getGlobal("gridEngine") eq "PBSPRO") {
         $code .= "if [ z\$PBS_O_WORKDIR != z ] ; then\n";
         $code .= "  cd \$PBS_O_WORKDIR\n";
@@ -584,8 +571,8 @@ sub setWorkDirectoryShellCode ($) {
 }
 
 
-
-#  Spend too much effort ensuring that the name is unique in the system.  For 'canu' jobs, we don't
+#  Spend too much effort ensuring that the name is unique in the system.
+#  For 'canu' jobs, we don't
 #  care.
 
 sub makeRandomSuffix ($) {
@@ -658,10 +645,8 @@ sub makeUniqueJobName ($$) {
 }
 
 
-
-
-#  Submit ourself back to the grid.  If the one argument is defined, make us hold on jobs with that
-#  name.
+#  Submit ourself back to the grid.
+#  If the one argument is defined, make us hold on jobs with that name.
 #
 #  The previous version (CA) would use "gridPropagateHold" to reset holds on existing jobs so that
 #  they would also hold on this job.
@@ -741,20 +726,18 @@ sub submitScript ($$) {
     #  LSF ignores all but the first option, so options need to be reversed.
     #  DNAnexus doesn't use threads, and memory is the instance type.
 
-    if    (uc(getGlobal("gridEngine")) eq "LSF") {
+    if (uc(getGlobal("gridEngine")) eq "LSF") {
         $gridOpts .= getGlobal("gridOptionsExecutive")   if (defined(getGlobal("gridOptionsExecutive")));
         $gridOpts .= " "                                 if (defined($gridOpts));
         $gridOpts .= getGlobal("gridOptions")            if (defined(getGlobal("gridOptions")));
         $gridOpts .= " "                                 if (defined($gridOpts));
         $gridOpts .= $resOption                          if (defined($resOption));
     }
-
     elsif (uc(getGlobal("gridEngine")) eq "DNANEXUS") {
         $gridOpts .= getGlobal("gridOptions")            if (defined(getGlobal("gridOptions")));
         $gridOpts .= " "                                 if (defined($gridOpts));
         $gridOpts .= getGlobal("gridOptionsExecutive")   if (defined(getGlobal("gridOptionsExecutive")));
     }
-
     else {
         $gridOpts .= $resOption                          if (defined($resOption));
         $gridOpts .= " "                                 if (defined($gridOpts));
@@ -785,7 +768,6 @@ sub submitScript ($$) {
         $qcmd .= " -icanu_iteration_max:int=" . getGlobal("canuIterationMax")     .   " \\\n";
         $qcmd .= " fetch_and_run \\\n";
     }
-
     else {
         $qcmd .= "  $script";
     }
@@ -806,7 +788,6 @@ sub submitScript ($$) {
 
     exit(1);
 }
-
 
 
 sub buildGridArray ($$$$) {
@@ -867,7 +848,6 @@ sub buildOutputName ($$$) {
     #  But, when the script is executed, it is rooted in '$path'.  To get the
     #  'logs' working, we need to check if the directory relative to the assembly root exists,
     #  but set it relative to $path (which is also where $script is relative to).
-
     $o = "$script.$tid.out";
     $o = "logs/$1.$tid.out"   if ((-e "$path/logs") && ($script =~ m/scripts\/(.*)/));
 
@@ -1060,41 +1040,36 @@ sub buildGridJob ($$$$$$$$$) {
 }
 
 
-
-
-#  Convert @jobs to a list of ranges, a-b, c, d-e, etc.  These will be directly submitted to the
-#  grid, or run one-by-one locally.
+#  Convert @jobs to a list of ranges, a-b, c, d-e, etc.
+#  These will be directly submitted to the grid, or run one-by-one locally.
 #
 #  If we're SGE, we can combine everything to one job range: a-b,c,d,e-f.  Except that
 #  buildGridJob() doesn't know how to handle that.
-
 sub convertToJobRange (@) {
     my @jobs;
 
     #  Expand the ranges into a simple list of job ids.
-
     foreach my $j (@_) {
-        if        ($j =~ m/^0*(\d+)-0*(\d+)$/) {
+        if    ($j =~ m/^0*(\d+)-0*(\d+)$/) {
             for (my $a=$1; $a<=$2; $a++) {
                 push @jobs, $a;
             }
 
-        } elsif ($j =~ m/^0*(\d+)$/) {
+        }
+        elsif ($j =~ m/^0*(\d+)$/) {
             push @jobs, $1;
 
-        } else {
+        }
+        else {
             caFailure("invalid job format in '$j'", undef);
         }
     }
-
-    #  Sort.
 
     my @jobsA = sort { $a <=> $b } @jobs;
 
     undef @jobs;
 
     #  Merge adjacent ids into a range.
-
     my $st = $jobsA[0];
     my $ed = $jobsA[0];
 
@@ -1146,8 +1121,8 @@ sub convertToJobRange (@) {
     return(@jobs);
 }
 
-
-
+# Literally returns the count of jobs.
+# Inputs can be ranges mixed with single numbers, but must be numbers
 sub countJobsInRange (@) {
     my @jobs  = @_;
     my $nJobs = 0;
@@ -1164,15 +1139,14 @@ sub countJobsInRange (@) {
 }
 
 
-
 #  Expects
 #    job type ("ovl", etc)
 #    output directory
 #    script name with no directory or .sh
 #    number of jobs in the task
 #
-#  If under grid control, submit grid jobs.  Otherwise, run in parallel locally.
-#
+#  If under grid control, submit grid jobs.
+#  Otherwise, run in parallel locally.
 sub submitOrRunParallelJob ($$$$@) {
     my $asm          = shift @_;  #  Name of the assembly
 
@@ -1191,22 +1165,25 @@ sub submitOrRunParallelJob ($$$$@) {
 
     my $runDirectly  = 0;
 
-    #  The script MUST be executable.
-
-    makeExecutable("$path/$script.sh");
-
     #  If the job can fit in the task running the executive, run it right here.
-
     if (($nJobs * $mem + 0.5 <= getGlobal("executiveMemory")) &&
         ($nJobs * $thr       <= getGlobal("executiveThreads"))) {
         $runDirectly = 1;
     }
 
-    #  Report what we're doing.
+    #  The script MUST be executable.
+    makeExecutable("$path/$script.sh");
 
+    #  Report what we're doing.
     #my $t = localtime();
     #print STDERR "----------------------------------------GRIDSTART $t\n";
     #print STDERR "$path/$script.sh with $mem gigabytes memory and $thr threads.\n";
+
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    # Checks and increases the iteration/attempt index
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     #  Break infinite loops.  If the grid jobs keep failing, give up after a few attempts.
     #
@@ -1228,17 +1205,23 @@ sub submitOrRunParallelJob ($$$$@) {
 
     if ($iter >= $max) {
         caExit("canu iteration count too high, stopping pipeline (most likely a problem in the grid-based computes)", undef);
-    } elsif ($iter == 0) {
+    }
+    elsif ($iter == 0) {
         $iter = "First";
-    } elsif ($iter == 1) {
+    }
+    elsif ($iter == 1) {
         $iter = "Second";
-    } elsif ($iter == 2) {
+    }
+    elsif ($iter == 2) {
         $iter = "Third";
-    } elsif ($iter == 3) {
+    }
+    elsif ($iter == 3) {
         $iter = "Fourth";
-    } elsif ($iter == 4) {
+    }
+    elsif ($iter == 4) {
         $iter = "Fifth";
-    } else {
+    }
+    else {
         $iter = "${iter}th";
     }
 
@@ -1247,12 +1230,16 @@ sub submitOrRunParallelJob ($$$$@) {
 
     setGlobal("canuIteration", getGlobal("canuIteration") + 1);
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    # Detect and schedule jobs in parallel (grid vs local)
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #  If 'gridEngineJobID' environment variable exists (SGE: JOB_ID; LSF: LSB_JOBID) then we are
     #  currently running under grid crontrol.  If so, run the grid command to submit more jobs, then
     #  submit ourself back to the grid.  If not, tell the user to run the grid command by hand.
 
     #  Jobs under grid control, and we submit them
-
     if (defined(getGlobal("gridEngine")) &&
         (getGlobal("useGrid") eq "1") &&
         (getGlobal("useGrid$jobType") eq "1") &&
@@ -1261,6 +1248,7 @@ sub submitOrRunParallelJob ($$$$@) {
         my @jobsSubmitted;
 
         print STDERR "--\n";
+        print STDERR "Job can fit in the task running the executive, run it right here.\n";
 
         purgeGridJobSubmitScripts($path, $script);
 
@@ -1373,8 +1361,7 @@ sub submitOrRunParallelJob ($$$$@) {
         caExit("Too many attempts to run a parallel stage on the grid.  Stop.", undef);
     }
 
-    #  Jobs under grid control, but the user must submit them
-
+    #  Jobs under grid control, but the user want to submit them
     if (defined(getGlobal("gridEngine")) &&
         (getGlobal("useGrid") ne "0") &&
         (getGlobal("useGrid$jobType") eq "1") &&
@@ -1388,6 +1375,7 @@ sub submitOrRunParallelJob ($$$$@) {
         print STDERR "Each task will use $mem gigabytes memory and $thr threads.\n";
         print STDERR "\n";
         print STDERR "  cd $cwd/$path\n";
+        print STDERR "Job can fit in the task running the executive, run it right here.\n";
 
         purgeGridJobSubmitScripts($path, $script);
 
@@ -1406,7 +1394,6 @@ sub submitOrRunParallelJob ($$$$@) {
     }
 
     #  Standard jobs, run locally.
-
     foreach my $j (@jobs) {
         my $st;
         my $ed;
@@ -1423,6 +1410,11 @@ sub submitOrRunParallelJob ($$$$@) {
         }
     }
 
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    # Final resource management
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     # compute limit based on # of cpus
     my $nCParallel  = getGlobal("${jobType}Concurrency");
     $nCParallel     = int(getGlobal("maxThreads") / $thr)  if ((!defined($nCParallel)) || ($nCParallel == 0));
@@ -1436,16 +1428,14 @@ sub submitOrRunParallelJob ($$$$@) {
     # run min of our limits
     my $nParallel  = $nCParallel < $nMParallel ? $nCParallel : $nMParallel;
 
+    # then concurrency to $nParallel
     schedulerSetNumberOfProcesses($nParallel);
     schedulerFinish($path, $jobType);
 }
 
 
-
-
 #  Pretty-ify the command.  If there are no newlines already in it, break
 #  before every switch and before file redirects.
-
 sub prettifyCommand ($) {
     my $dis = shift @_;
 
@@ -1498,7 +1488,6 @@ sub reportRunError ($) {
 
 
 #  Utility to run a command and check the exit status, report time used.
-#
 sub runCommand ($$) {
     my $dir = shift @_;
     my $cmd = shift @_;
@@ -1507,13 +1496,11 @@ sub runCommand ($$) {
     return(0)  if ($cmd eq "");
 
     #  Check if the directory exists.
-
     if (! -d $dir) {
         caFailure("Directory '$dir' doesn't exist, can't run command", "");
     }
 
     #  If only showing the next command, show it and stop.
-
     if (getGlobal("showNext")) {
         print STDERR "--NEXT-COMMAND\n";
         print STDERR "$dis\n";
@@ -1521,7 +1508,6 @@ sub runCommand ($$) {
     }
 
     #  Log that we're starting, and show the pretty-ified command.
-
     my $cwd = getcwd();        #  Remember where we are.
     chdir($dir);               #  So we can root the jobs in the correct location.
 
@@ -1541,7 +1527,6 @@ sub runCommand ($$) {
     chdir($cwd);
 
     #  Pretty much copied from Programming Perl page 230
-
     return(0) if ($rc == 0);
 
     reportRunError($rc);
@@ -1550,9 +1535,7 @@ sub runCommand ($$) {
 }
 
 
-
 #  Duplicated in Grid_Cloud.pm to get around recursive 'use' statements.
-
 sub runCommandSilently ($$$) {
     my $dir      = shift @_;
     my $cmd      = shift @_;
@@ -1579,7 +1562,6 @@ sub runCommandSilently ($$$) {
 }
 
 
-
 sub findCommand ($) {
     my $cmd  = shift @_;
     my @path = File::Spec->path;
@@ -1592,7 +1574,6 @@ sub findCommand ($) {
 
     return(undef);
 }
-
 
 
 sub findExecutable ($) {
