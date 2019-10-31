@@ -148,15 +148,17 @@ my $printProcessCommand     = 1;     #  Show commands as they run
 my $numberOfProcessesToWait = 0;     #  Number of jobs we can leave running at exit
 
 # practically static after initialization
-my $numberOfProcesses       = 0;     #  Number of jobs concurrently running
-my @processQueue            = ();
+my $allowedConcurrency  = 0;         #  Allowed number of jobs concurrently running (resources constraint)
+
+# gradually de-queued after initialization
+my @processQueue        = ();
 
 # dynamic arrays
-my @processesRunning        = ();
+my @processesRunning    = ();
 
-# Simply set $numberOfProcesses to provided value
+# Simply set $allowedConcurrency to provided value
 sub schedulerSetNumberOfProcesses {
-    $numberOfProcesses = shift @_;
+    $allowedConcurrency = shift @_;
 }
 
 # Given a cmd to run, push it to @processQueue
@@ -190,28 +192,20 @@ sub schedulerForkProcess ($) {
     }
 }
 
-sub schedulerReapProcess ($) {
-    my $pid = shift @_;
-
-    if (waitpid($pid, &WNOHANG) > 0) {
-        return(1);
-    } else {
-        return(0);
-    }
-}
-
+# Reap any finished processes, then move cmd from @processQueue to @processesRunning, if
+# @processesRunning length not exceed allowed concurrency AND there's cmd to move
+# IN OTHER WORDS: THIS ONLY MOVES TASKS FROM A LARGE QUEUE TO A SMALL QUEUE AND LAUCH JOBS IN THE SMALL QUEUE BUT DOES NOT WAIT
 sub schedulerRun () {
-    my @running;
 
     #  Reap any processes that have finished
-    foreach my $i (@processesRunning) {
-        push @running, $i  if (schedulerReapProcess($i) == 0);
+    my @running;
+    foreach my $pid (@processesRunning) {
+        push @running, $pid  if (waitpid($pid, &WNOHANG) <= 0);
     }
-
     @processesRunning = @running;
 
     #  Run processes in any available slots
-    while ((scalar(@processesRunning) < $numberOfProcesses) &&
+    while ((scalar(@processesRunning) < $allowedConcurrency) &&
            (scalar(@processQueue) > 0)) {
         my $process = shift @processQueue;
         print STDERR "    $process\n";
@@ -232,26 +226,27 @@ sub schedulerFinish ($$) {
     my $diskfree  = (defined($dir)) ? (diskSpace($dir)) : (0);
 
     print STDERR "----------------------------------------\n";
-    print STDERR "-- Starting '$nam' concurrent execution on ", scalar(localtime()), " with $diskfree GB free disk space ($num_remain processes; $numberOfProcesses concurrently)\n"  if  (defined($dir));
-    print STDERR "-- Starting '$nam' concurrent execution on ", scalar(localtime()), " ($num_remain processes; $numberOfProcesses concurrently)\n"                                    if (!defined($dir));
+    print STDERR "-- Starting '$nam' concurrent execution on ", scalar(localtime()), " with $diskfree GB free disk space ($num_remain processes; $allowedConcurrency concurrently)\n"  if  (defined($dir));
+    print STDERR "-- Starting '$nam' concurrent execution on ", scalar(localtime()), " ($num_remain processes; $allowedConcurrency concurrently)\n"                                    if (!defined($dir));
     print STDERR "\n";
     print STDERR "    cd $dir\n";
 
     my $cwd = getcwd();  #  Remember where we are.
     chdir($dir);         #  So we can root the jobs in the correct location.
 
-    #  Run all submitted jobs
-    my @newProcesses;
+    #  Run all submitted jobs in batches of @allowedConcurrency
     while ($num_remain > 0) {
 
+        # submit one batch
         schedulerRun();
 
+        # TODO: unsure exactly what the $child processid really is
         $num_remain = scalar(@processQueue);
-
         if ($num_remain > 0) {
+
             $child = waitpid -1, 0;
 
-            undef @newProcesses;
+            my @newProcesses;
             foreach my $i (@processesRunning) {
                 push @newProcesses, $i if ($child != $i);
             }
