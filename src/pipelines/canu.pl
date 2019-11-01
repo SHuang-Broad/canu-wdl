@@ -163,6 +163,8 @@ my $mode          = undef;   #  "haplotype", "correct", "trim", "trim-assemble" 
 my $type          = undef;   #  "pacbio" or "nanopore"
 my $step          = "run";
 
+my $debug = undef;
+
 while (scalar(@ARGV)) {
     my $arg = shift @ARGV;
 
@@ -277,6 +279,9 @@ while (scalar(@ARGV)) {
         push @specOpts, $arg;
         addCommandLineOption("'$arg'");
 
+    }
+    elsif ($arg eq "-debug") {
+        $debug = 1;
     }
     else {
         addCommandLineError("ERROR:  Invalid command line option '$arg'.  Did you forget quotes around options with spaces?\n");
@@ -394,7 +399,7 @@ configureDNANexus();
 #  Set jobs sizes based on genomeSize and available hosts;
 #  Check that parameters (except error rates) are valid and consistent;
 #  Fail if any thing flagged an error condition;
-configureAssembler();  #  Set job sizes and etc bases on genomeSize and hosts available.
+configureAssembler($debug);  #  Set job sizes and etc bases on genomeSize and hosts available.
 checkParameters();     #  Check all parameters (except error rates) are valid and consistent.
 printHelp();           #  And one final last chance to fail.
 

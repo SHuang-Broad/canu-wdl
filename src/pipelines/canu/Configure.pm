@@ -199,6 +199,11 @@ sub getAllowedResources ($$$$$@) {
     my $uni  = shift @_;  #  There's only one task to run (bogart, gfa)
     my $dbg  = shift @_;  #  Optional, report debugging stuff
 
+    if ($dbg) {
+        print STDERR "====================================\n";
+        print STDERR "DEBUG MODE is turned on for configuring resources for $tag$alg\n";
+    }
+
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     # Computing environment (grid or local)
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -309,7 +314,7 @@ sub getAllowedResources ($$$$$@) {
     #    taskThreads = 4,8,32,64
     #    taskMemory  = 16g,32g,64g
     my $bestCores      = 0;
-    my $bestMemory     = 16 * 1024 * 1024;   #  16 petabytes.
+    my $bestMemory     = 16 * 1024 * 1024;
     my $availMemoryMin = undef;
     my $availMemoryMax = undef;
     foreach my $m (@taskMemory) {
@@ -509,6 +514,10 @@ sub getAllowedResources ($$$$$@) {
     $all .= "-- Local: $t $mem  $thr x $job  $memt $thrt  $nam\n"      if ( defined($concurrent));
     $all .= "-- Grid:  $t $mem  $thr  $nam\n"                          if (!defined($concurrent));
 
+    if ($dbg) {
+        print STDERR "====================================\n";
+    }
+
     return($err, $all);
 }
 
@@ -581,7 +590,8 @@ sub displayGenomeSize ($) {
 ###############################################################################
 
 #  If minMemory or minThreads isn't defined, pick a reasonable pair based on genome size.
-sub configureAssembler () {
+sub configureAssembler (@) {
+    my $to_debug = shift @_;
 
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #  Parse units on things the user possibly set.
@@ -900,36 +910,36 @@ sub configureAssembler () {
     my $err;
     my $all;
 
-    ($err, $all) = getAllowedResources("",    "meryl",     $err, $all, 0);
+    ($err, $all) = getAllowedResources("",    "meryl",     $err, $all, 0, $to_debug);
 
-    ($err, $all) = getAllowedResources("",    "hap",       $err, $all, 0);
+    ($err, $all) = getAllowedResources("",    "hap",       $err, $all, 0, $to_debug);
 
-    ($err, $all) = getAllowedResources("cor", "mhap",      $err, $all, 0)   if (getGlobal("corOverlapper") eq "mhap");
-    ($err, $all) = getAllowedResources("cor", "mmap",      $err, $all, 0)   if (getGlobal("corOverlapper") eq "minimap");
-    ($err, $all) = getAllowedResources("cor", "ovl",       $err, $all, 0)   if (getGlobal("corOverlapper") eq "ovl");
+    ($err, $all) = getAllowedResources("cor", "mhap",      $err, $all, 0, $to_debug)   if (getGlobal("corOverlapper") eq "mhap");
+    ($err, $all) = getAllowedResources("cor", "mmap",      $err, $all, 0, $to_debug)   if (getGlobal("corOverlapper") eq "minimap");
+    ($err, $all) = getAllowedResources("cor", "ovl",       $err, $all, 0, $to_debug)   if (getGlobal("corOverlapper") eq "ovl");
 
-    ($err, $all) = getAllowedResources("obt", "mhap",      $err, $all, 0)   if (getGlobal("obtOverlapper") eq "mhap");
-    ($err, $all) = getAllowedResources("obt", "mmap",      $err, $all, 0)   if (getGlobal("obtOverlapper") eq "minimap");
-    ($err, $all) = getAllowedResources("obt", "ovl",       $err, $all, 0)   if (getGlobal("obtOverlapper") eq "ovl");
+    ($err, $all) = getAllowedResources("obt", "mhap",      $err, $all, 0, $to_debug)   if (getGlobal("obtOverlapper") eq "mhap");
+    ($err, $all) = getAllowedResources("obt", "mmap",      $err, $all, 0, $to_debug)   if (getGlobal("obtOverlapper") eq "minimap");
+    ($err, $all) = getAllowedResources("obt", "ovl",       $err, $all, 0, $to_debug)   if (getGlobal("obtOverlapper") eq "ovl");
 
-    ($err, $all) = getAllowedResources("utg", "mhap",      $err, $all, 0)   if (getGlobal("utgOverlapper") eq "mhap");
-    ($err, $all) = getAllowedResources("utg", "mmap",      $err, $all, 0)   if (getGlobal("utgOverlapper") eq "minimap");
-    ($err, $all) = getAllowedResources("utg", "ovl",       $err, $all, 0)   if (getGlobal("utgOverlapper") eq "ovl");
+    ($err, $all) = getAllowedResources("utg", "mhap",      $err, $all, 0, $to_debug)   if (getGlobal("utgOverlapper") eq "mhap");
+    ($err, $all) = getAllowedResources("utg", "mmap",      $err, $all, 0, $to_debug)   if (getGlobal("utgOverlapper") eq "minimap");
+    ($err, $all) = getAllowedResources("utg", "ovl",       $err, $all, 0, $to_debug)   if (getGlobal("utgOverlapper") eq "ovl");
 
-    ($err, $all) = getAllowedResources("",    "cor",       $err, $all, 0);
+    ($err, $all) = getAllowedResources("",    "cor",       $err, $all, 0, $to_debug);
 
-    ($err, $all) = getAllowedResources("",    "ovb",       $err, $all, 0);
-    ($err, $all) = getAllowedResources("",    "ovs",       $err, $all, 0);
+    ($err, $all) = getAllowedResources("",    "ovb",       $err, $all, 0, $to_debug);
+    ($err, $all) = getAllowedResources("",    "ovs",       $err, $all, 0, $to_debug);
 
-    ($err, $all) = getAllowedResources("",    "red",       $err, $all, 0);
-    ($err, $all) = getAllowedResources("",    "oea",       $err, $all, 0);
+    ($err, $all) = getAllowedResources("",    "red",       $err, $all, 0, $to_debug);
+    ($err, $all) = getAllowedResources("",    "oea",       $err, $all, 0, $to_debug);
 
-    ($err, $all) = getAllowedResources("",    "bat",       $err, $all, 1)   if (uc(getGlobal("unitigger")) eq "BOGART");
-    ($err, $all) = getAllowedResources("",    "dbg",       $err, $all, 1)   if (uc(getGlobal("unitigger")) eq "WTDBG");
+    ($err, $all) = getAllowedResources("",    "bat",       $err, $all, 1, $to_debug)   if (uc(getGlobal("unitigger")) eq "BOGART");
+    ($err, $all) = getAllowedResources("",    "dbg",       $err, $all, 1, $to_debug)   if (uc(getGlobal("unitigger")) eq "WTDBG");
 
-    ($err, $all) = getAllowedResources("",    "cns",       $err, $all, 0);
+    ($err, $all) = getAllowedResources("",    "cns",       $err, $all, 0, $to_debug);
 
-    ($err, $all) = getAllowedResources("",    "gfa",       $err, $all, 1);
+    ($err, $all) = getAllowedResources("",    "gfa",       $err, $all, 1, $to_debug);
 
     #  Check some minimums.
     if ((getGlobal("ovsMemory") =~ m/^([0123456789.]+)-*[0123456789.]*$/) &&
