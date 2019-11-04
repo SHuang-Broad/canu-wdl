@@ -422,6 +422,14 @@ my $setUpForPacBio   = 0;
 my $setUpForNanopore = 0;
 my $setUpForHiFi     = 0;
 
+my $stopaf = getGlobal("stopAfter");
+my $skip_child_read_loading = $mode eq "haplotype" &&
+                                defined($stopaf) &&
+                                ($stopaf eq "meryl-configure" ||
+                                 $stopaf eq "meryl-count" ||
+                                 $stopaf eq "meryl-merge" ||
+                                 $stopaf eq "meryl-subtract");
+
 #  Make space for us to work in, and move there.
 setWorkDirectory($asm, $rootdir);
 
@@ -524,7 +532,9 @@ elsif (scalar(@inputFiles) > 0) {
 }
 #  Otherwise, no reads found in a store, and no input files.
 else {
-    caExit("ERROR: No reads supplied, and can't find any reads in any seqStore", undef);
+    if ( !$skip_child_read_loading ) {
+        caExit("ERROR: No reads supplied, and can't find any reads in any seqStore", undef);
+    }
 }
 
 #  Set an initial run mode, based on the libraries we have found, or the stores that exist (unless
@@ -539,57 +549,58 @@ if (!defined($mode)) {
     $mode = "assemble"       if ($nAsm > 0);
 }
 
-#  Set the type of the reads.  A command line option could force the type, e.g., "-pacbio" or
-#  "-nanopore", to let you do cRaZy stuff like "-nanopore -pacbio-raw *fastq".
-if (!defined($type)) {
-    $type = "pacbio"        if ($setUpForPacBio   > 0);
-    $type = "nanopore"      if ($setUpForNanopore > 0);
-    $type = "hifi"          if ($setUpForHiFi     > 0);
+if ( !$skip_child_read_loading ) {
+    #  Set the type of the reads.  A command line option could force the type, e.g., "-pacbio" or
+    #  "-nanopore", to let you do cRaZy stuff like "-nanopore -pacbio-raw *fastq".
+    if (!defined($type)) {
+        $type = "pacbio"        if ($setUpForPacBio   > 0);
+        $type = "nanopore"      if ($setUpForNanopore > 0);
+        $type = "hifi"          if ($setUpForHiFi     > 0);
+    }
+
+    #  Now set error rates (if not set already) based on the dominant read type.
+    if ($type eq"pacbio") {
+        setGlobalIfUndef("corOvlErrorRate",  0.240);
+        setGlobalIfUndef("obtOvlErrorRate",  0.045);
+        setGlobalIfUndef("utgOvlErrorRate",  0.045);
+        setGlobalIfUndef("corErrorRate",     0.300);
+        setGlobalIfUndef("obtErrorRate",     0.045);
+        setGlobalIfUndef("utgErrorRate",     0.045);
+        setGlobalIfUndef("cnsErrorRate",     0.075);
+    }
+
+    if ($type eq"nanopore") {
+        setGlobalIfUndef("corOvlErrorRate",  0.320);
+        setGlobalIfUndef("obtOvlErrorRate",  0.120);
+        setGlobalIfUndef("utgOvlErrorRate",  0.120);
+        setGlobalIfUndef("corErrorRate",     0.500);
+        setGlobalIfUndef("obtErrorRate",     0.120);
+        setGlobalIfUndef("utgErrorRate",     0.120);
+        setGlobalIfUndef("cnsErrorRate",     0.200);
+    }
+
+    if ($type eq"hifi") {
+        setGlobalIfUndef("corOvlErrorRate",  0.000);
+        setGlobalIfUndef("obtOvlErrorRate",  0.000);
+        setGlobalIfUndef("utgOvlErrorRate",  0.025);
+        setGlobalIfUndef("corErrorRate",     0.000);
+        setGlobalIfUndef("obtErrorRate",     0.000);
+        setGlobalIfUndef("utgErrorRate",     0.025);
+        setGlobalIfUndef("cnsErrorRate",     0.050);
+        setGlobalIfUndef("batOptions",       "-eg 0.0003 -dg 3 -db 3 -dr 1 -ca 50 -cp 5");
+    }
+
+    #  Check for a few errors:
+    #    no mode                -> don't have any reads or any store to run from.
+    #    both raw and corrected -> don't know how to process these
+    caExit("ERROR: No reads supplied, and can't find any reads in any seqStore", undef)   if (!defined($mode));
+    caExit("ERROR: Failed to determine the sequencing technology of the reads", undef)    if (!defined($type));
+
+    caExit("ERROR: Can't mix uncorrected, corrected and hifi reads", undef)               if ($haveRaw  && $haveCorrected && $haveHiFi);
+    caExit("ERROR: Can't mix uncorrected and corrected reads", undef)                     if ($haveRaw  && $haveCorrected);
+    caExit("ERROR: Can't mix uncorrected and hifi reads", undef)                          if ($haveHiFi && $haveRaw);
+    caExit("ERROR: Can't mix corrected and hifi reads", undef)                            if ($haveHiFi && $haveCorrected);
 }
-
-#  Now set error rates (if not set already) based on the dominant read type.
-if ($type eq"pacbio") {
-    setGlobalIfUndef("corOvlErrorRate",  0.240);
-    setGlobalIfUndef("obtOvlErrorRate",  0.045);
-    setGlobalIfUndef("utgOvlErrorRate",  0.045);
-    setGlobalIfUndef("corErrorRate",     0.300);
-    setGlobalIfUndef("obtErrorRate",     0.045);
-    setGlobalIfUndef("utgErrorRate",     0.045);
-    setGlobalIfUndef("cnsErrorRate",     0.075);
-}
-
-if ($type eq"nanopore") {
-    setGlobalIfUndef("corOvlErrorRate",  0.320);
-    setGlobalIfUndef("obtOvlErrorRate",  0.120);
-    setGlobalIfUndef("utgOvlErrorRate",  0.120);
-    setGlobalIfUndef("corErrorRate",     0.500);
-    setGlobalIfUndef("obtErrorRate",     0.120);
-    setGlobalIfUndef("utgErrorRate",     0.120);
-    setGlobalIfUndef("cnsErrorRate",     0.200);
-}
-
-if ($type eq"hifi") {
-    setGlobalIfUndef("corOvlErrorRate",  0.000);
-    setGlobalIfUndef("obtOvlErrorRate",  0.000);
-    setGlobalIfUndef("utgOvlErrorRate",  0.025);
-    setGlobalIfUndef("corErrorRate",     0.000);
-    setGlobalIfUndef("obtErrorRate",     0.000);
-    setGlobalIfUndef("utgErrorRate",     0.025);
-    setGlobalIfUndef("cnsErrorRate",     0.050);
-    setGlobalIfUndef("batOptions",       "-eg 0.0003 -dg 3 -db 3 -dr 1 -ca 50 -cp 5");
-}
-
-#  Check for a few errors:
-#    no mode                -> don't have any reads or any store to run from.
-#    both raw and corrected -> don't know how to process these
-caExit("ERROR: No reads supplied, and can't find any reads in any seqStore", undef)   if (!defined($mode));
-caExit("ERROR: Failed to determine the sequencing technology of the reads", undef)    if (!defined($type));
-
-caExit("ERROR: Can't mix uncorrected, corrected and hifi reads", undef)               if ($haveRaw  && $haveCorrected && $haveHiFi);
-caExit("ERROR: Can't mix uncorrected and corrected reads", undef)                     if ($haveRaw  && $haveCorrected);
-caExit("ERROR: Can't mix uncorrected and hifi reads", undef)                          if ($haveHiFi && $haveRaw);
-caExit("ERROR: Can't mix corrected and hifi reads", undef)                            if ($haveHiFi && $haveCorrected);
-
 #  Check that we were supplied a work directory, and that it exists, or we can create it.
 make_path("canu-logs")     if (! -d "canu-logs");
 make_path("canu-scripts")  if (! -d "canu-scripts");
