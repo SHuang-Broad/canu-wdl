@@ -910,9 +910,25 @@ sub configureAssembler (@) {
     my $err;
     my $all;
 
-    ($err, $all) = getAllowedResources("",    "meryl",     $err, $all, 0, $to_debug);
+    my $stopaf = getGlobal("stopAfter");
+    my $begat  = getGlobal("beginConfigAt");
+    goto $begat if (defined($begat));
 
+  meryl:
+    ($err, $all) = getAllowedResources("",    "meryl",     $err, $all, 0, $to_debug);
+    if (defined($stopaf)) {
+        goto configured if ($stopaf eq "meryl-configure" ||
+                            $stopaf eq "meryl-count" ||
+                            $stopaf eq "meryl-merge" ||
+                            $stopaf eq "meryl-subtract");
+    }
+
+  hap:
     ($err, $all) = getAllowedResources("",    "hap",       $err, $all, 0, $to_debug);
+    if (defined($stopaf)) {
+        goto configured if ($stopaf eq "haplotype-configure" ||
+                            $stopaf eq "haplotype");
+    }
 
     ($err, $all) = getAllowedResources("cor", "mhap",      $err, $all, 0, $to_debug)   if (getGlobal("corOverlapper") eq "mhap");
     ($err, $all) = getAllowedResources("cor", "mmap",      $err, $all, 0, $to_debug)   if (getGlobal("corOverlapper") eq "minimap");
@@ -947,6 +963,7 @@ sub configureAssembler (@) {
         caExit("ovsMemory must be at least 0.25g or 256m", undef);
     }
 
+  configured:
     #  2017-02-21 -- not sure why $err is being reported here if it doesn't stop.  What's in it?
     print STDERR "--\n" if (defined($err));
     print STDERR $err   if (defined($err));

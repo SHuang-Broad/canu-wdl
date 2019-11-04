@@ -934,6 +934,7 @@ sub setDefaults () {
     setDefault("stopOnReadQuality", 1,     "Stop if a significant portion of the input data has quality value or base composition errors");
     setDefault("stopOnLowCoverage", 10,    "Stop if raw, corrected or trimmed read coverage is low");
     setDefault("stopAfter",         undef, "Stop after a specific algorithm step is completed");
+    setDefault("beginConfigAt",     undef, "Begin configuring the parameters/resources at requested stage");
 
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Grid Engine configuration, internal parameters.  These are filled out in canu.pl, right after this function returns.

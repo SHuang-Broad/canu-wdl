@@ -70,7 +70,7 @@ minReadLength <integer=1000>
 
   If set high enough, the gatekeeper module will claim there are errors in the input reads,
   as too many of the input reads have been discarded.  As long as there is sufficient coverage,
-  this is not a problem.  See :ref:`stopOnReadQuality <stopOnReadQuality>` and 
+  this is not a problem.  See :ref:`stopOnReadQuality <stopOnReadQuality>` and
   :ref:`stopOnLowCoverage <stopOnLowCoverage>`
 
 .. _minOverlapLength:
@@ -109,7 +109,7 @@ genomeSize <float=unset> *required*
 
 fast <toggle>
    This option uses MHAP overlapping for all steps, not just correction, making assembly significantly faster. It can be used on any genome size but may produce less continuous assemblies on genomes larger than 1 Gbp. It is recommended for nanopore genomes smaller than 1 Gbp or metagenomes.
-   
+
    The fast option will also optionally use `wtdbg <https://github.com/ruanjue/wtdbg2>`_ for unitigging if wtdbg is manually copied to the Canu binary folder. However, this is only tested with very small genomes and is **NOT** recommended.
 
 .. _canuIteration:
@@ -192,6 +192,18 @@ stopOnLowCoverage <integer=10>
   initially loaded into the sequence store, when corrected reads are generated,
   and when read ends are trimmed off.
 
+.. _beginConfigAt:
+
+beginConfigAt <string=undefined>
+  If set, Canu will begin configuring the assembler from a specific stage in the pipeline.  Valid values are:
+
+  +-----------------------+-------------------------------------------------------------------+
+  | **beginConfigAt=**    | **Canu will begin configuring ....**                              |
+  +-----------------------+-------------------------------------------------------------------+
+  | meryl                 | kmer counting, merging and subtracting.                           |
+  +-----------------------+-------------------------------------------------------------------+
+  | hap                   | haplotype read separation.                    |
+  +-----------------------+-------------------------------------------------------------------+
 
 .. _stopAfter:
 
