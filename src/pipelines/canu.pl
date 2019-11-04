@@ -283,6 +283,9 @@ while (scalar(@ARGV)) {
     elsif ($arg eq "-debug") {
         $debug = 1;
     }
+    elsif ($arg eq "-skipConfiguration") {
+        setGlobalIfUndef("skipConfiguration", 1);
+    }
     else {
         addCommandLineError("ERROR:  Invalid command line option '$arg'.  Did you forget quotes around options with spaces?\n");
     }
@@ -722,24 +725,49 @@ if ((scalar(@haplotypes) > 0) &&
 
         submitScript($asm, undef);   #  See comments there as to why this is safe.
 
+        # we write the following steps following a vision such that
+        #   * parental read re-Partition
+        #   * meryl steps configuration & meryl-count parallel execution
+        #   * meryl-merge/subtract execution
+        #   * child long read assignment
+        # are done in different WDL tasks run on VMs of different specifications
         print STDERR "--\n";
         print STDERR "--\n";
         print STDERR "-- BEGIN RE-PARTITIONING PARENTAL READS\n";
         print STDERR "--\n";
-
         my $merSize = estimateMerSize(getGlobal("genomeSize"));
         haplotypeSplitReads($asm, $merSize, %haplotypeReads);
+        print STDERR "--\n";
+        print STDERR "--\n";
+        print STDERR "-- DONE RE-PARTITIONING PARENTAL READS\n";
+        print STDERR "--\n";
 
         print STDERR "--\n";
         print STDERR "--\n";
-        print STDERR "-- BEGIN HAPLOTYPING\n";
+        print STDERR "-- BEGIN CONFIGURING meryl AND meryl-count EXECUTION\n";
         print STDERR "--\n";
-
         haplotypeCountConfigure($asm, $merSize, %haplotypeReads);
-
         haplotypeCountCheck($asm)                   foreach (1..getGlobal("canuIterationMax") + 1);
+        print STDERR "--\n";
+        print STDERR "--\n";
+        print STDERR "-- DONE CONFIGURING meryl AND meryl-count EXECUTION\n";
+        print STDERR "--\n";
+
+        print STDERR "--\n";
+        print STDERR "--\n";
+        print STDERR "-- BEGIN meryl-merge/subtract EXECUTION\n";
+        print STDERR "--\n";
         haplotypeMergeCheck($asm, @haplotypes)      foreach (1..getGlobal("canuIterationMax") + 1);
         haplotypeSubtractCheck($asm, @haplotypes)   foreach (1..getGlobal("canuIterationMax") + 1);
+        print STDERR "--\n";
+        print STDERR "--\n";
+        print STDERR "-- BEGIN meryl-merge/subtract EXECUTION\n";
+        print STDERR "--\n";
+
+        print STDERR "--\n";
+        print STDERR "--\n";
+        print STDERR "-- BEGIN ASSIGNING CHILD LONG READS\n";
+        print STDERR "--\n";
 
         haplotypeReadsConfigure($asm, \@haplotypes, \@inputFiles);
         haplotypeReadsCheck($asm)                   foreach (1..getGlobal("canuIterationMax") + 1);

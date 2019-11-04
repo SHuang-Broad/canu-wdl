@@ -904,6 +904,9 @@ sub configureAssembler (@) {
     #  Finally, use all that setup to pick actual values for each component.
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
+    # directed by user that no resource configuration is necessary
+    goto configured if (getGlobal("skipConfiguration"));
+
     #  ovsMemory needs to be configured here iff the sequential build method is used.  This runs in
     #  the canu process, and needs to have a single memory size.  The parallel method will pick a
     #  memory size based on the number of overlaps and submit jobs using that size.
