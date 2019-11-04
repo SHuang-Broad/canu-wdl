@@ -1630,6 +1630,7 @@ sub checkParameters () {
         my $failureString = "ERROR:  Invalid stopAfter specified (" . getGlobal("stopAfter") . "); must be one of:\n";
 
         my @stopAfter = ("sequenceStore",
+                         "parental-reads-repartition",
                          "meryl-configure",
                          "meryl-count",
                          "meryl-merge",

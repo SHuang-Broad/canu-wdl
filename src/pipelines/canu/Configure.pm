@@ -911,6 +911,11 @@ sub configureAssembler (@) {
     my $all;
 
     my $stopaf = getGlobal("stopAfter");
+    if (defined($stopaf) &&
+        $stopaf eq "parental-reads-repartition") {
+        goto configured;
+    }
+
     my $begat  = getGlobal("beginConfigAt");
     goto $begat if (defined($begat));
 

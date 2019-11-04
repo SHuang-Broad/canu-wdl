@@ -344,6 +344,9 @@ checkGnuplot();
 #  And one last chance to fail - because java and gnuplot both can set an error.
 printHelp();
 
+# get user selected stopAfter, so that we can skip some configurations
+my $stopaf = getGlobal("stopAfter");
+
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 # Detect computing environment.
@@ -422,10 +425,10 @@ my $setUpForPacBio   = 0;
 my $setUpForNanopore = 0;
 my $setUpForHiFi     = 0;
 
-my $stopaf = getGlobal("stopAfter");
 my $skip_child_read_loading = $mode eq "haplotype" &&
                                 defined($stopaf) &&
-                                ($stopaf eq "meryl-configure" ||
+                                ($stopaf eq "parental-reads-repartition" ||
+                                 $stopaf eq "meryl-configure" ||
                                  $stopaf eq "meryl-count" ||
                                  $stopaf eq "meryl-merge" ||
                                  $stopaf eq "meryl-subtract");
@@ -720,10 +723,18 @@ if ((scalar(@haplotypes) > 0) &&
 
         print STDERR "--\n";
         print STDERR "--\n";
+        print STDERR "-- BEGIN RE-PARTITIONING PARENTAL READS\n";
+        print STDERR "--\n";
+
+        my $merSize = estimateMerSize(getGlobal("genomeSize"));
+        haplotypeSplitReads($asm, $merSize, %haplotypeReads);
+
+        print STDERR "--\n";
+        print STDERR "--\n";
         print STDERR "-- BEGIN HAPLOTYPING\n";
         print STDERR "--\n";
 
-        haplotypeCountConfigure($asm, %haplotypeReads);
+        haplotypeCountConfigure($asm, $merSize, %haplotypeReads);
 
         haplotypeCountCheck($asm)                   foreach (1..getGlobal("canuIterationMax") + 1);
         haplotypeMergeCheck($asm, @haplotypes)      foreach (1..getGlobal("canuIterationMax") + 1);
