@@ -935,6 +935,7 @@ sub setDefaults () {
     setDefault("stopOnLowCoverage", 10,    "Stop if raw, corrected or trimmed read coverage is low");
     setDefault("stopAfter",         undef, "Stop after a specific algorithm step is completed");
     setDefault("beginConfigAt",     undef, "Begin configuring the parameters/resources at requested stage");
+    setDefault("skipConfiguration", undef, "Skip configuring resources for stages all together (it has been configured)");
 
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #####  Grid Engine configuration, internal parameters.  These are filled out in canu.pl, right after this function returns.
@@ -1662,6 +1663,10 @@ sub checkParameters () {
         }
 
         addCommandLineError($failureString)   if ($ok == 0);
+    }
+
+    if (getGlobal("beginConfigAt") && getGlobal("skipConfiguration")) {
+        addCommandLineError("ERROR:  Both \"beginConfigAt\" and \"skipConfiguration\" specified!\n");
     }
 
     {
