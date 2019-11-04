@@ -97,6 +97,7 @@ my @specOpts;        #  Command line specs
 my @inputFiles;      #  Command line inputs, later inputs in spec files are added
 
 my %haplotypeReads;  #  Inpout reads for haplotypes; each element is a NUL-delimited list of files
+my @haplotypes;
 
 #  Initialize our defaults.  Must be done before defaults are reported in printOptions() below.
 setDefaults();
@@ -261,15 +262,18 @@ while (scalar(@ARGV)) {
         while (defined($fopt)) {
 
             $haplotypeReads{$hapname} .= "$fopt\0";
-
             addCommandLineOption("$arg '$fopt'");
 
             shift @ARGV;
-
             $file = $ARGV[0];
             $fopt = addSequenceFile($readdir, $file);
         }
 
+        @haplotypes = sort keys %haplotypeReads;
+    }
+    elsif ($arg eq "-hapNames") {
+        my $temp = shift @ARGV;
+        @haplotypes = split(/ /, $temp);
     }
     elsif (-e $arg) {
         addCommandLineError("ERROR:  File '$arg' supplied on command line, don't know what to do with it.\n");
@@ -346,9 +350,6 @@ checkGnuplot();
 
 #  And one last chance to fail - because java and gnuplot both can set an error.
 printHelp();
-
-# get user selected stopAfter, so that we can skip some configurations
-my $stopaf = getGlobal("stopAfter");
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -428,6 +429,8 @@ my $setUpForPacBio   = 0;
 my $setUpForNanopore = 0;
 my $setUpForHiFi     = 0;
 
+# get user selected stopAfter, so that we can skip some configurations
+my $stopaf = getGlobal("stopAfter");
 my $skip_child_read_loading = $mode eq "haplotype" &&
                                 defined($stopaf) &&
                                 ($stopaf eq "parental-reads-repartition" ||
@@ -716,13 +719,15 @@ sub overlap ($$) {
 # if trio-binning is requested and hasn't finished sucessfully,
 # rely on subroutines defined in canu::HaplotypeReads for working,
 #  and on submitScript defined in canu::Execution for submission
-my @haplotypes = sort keys %haplotypeReads;
 if ((scalar(@haplotypes) > 0) &&
     (setOptions($mode, "haplotype") eq "haplotype")) {
     if ((! -e "./haplotype/haplotyping.success") &&
         (haplotypeReadsExist($asm, @haplotypes) eq "no")) {
 
         submitScript($asm, undef);   #  See comments there as to why this is safe.
+
+        my $begat  = getGlobal("beginConfigAt");
+        goto $begat if (defined($begat));
 
         # we write the following steps following a vision such that
         #   * parental read re-Partition
@@ -734,42 +739,66 @@ if ((scalar(@haplotypes) > 0) &&
         print STDERR "--\n";
         print STDERR "-- BEGIN RE-PARTITIONING PARENTAL READS\n";
         print STDERR "--\n";
+        print STDERR "--\n";
         my $merSize = estimateMerSize(getGlobal("genomeSize"));
-        haplotypeSplitReads($asm, $merSize, %haplotypeReads);
+        my %repartitionedParentalReads = haplotypeSplitReads($asm, $merSize, %haplotypeReads);
         print STDERR "--\n";
         print STDERR "--\n";
         print STDERR "-- DONE RE-PARTITIONING PARENTAL READS\n";
         print STDERR "--\n";
+        print STDERR "--\n";
+
+  meryl:
+        print STDERR "--\n";
+        print STDERR "--\n";
+        print STDERR "-- BEGIN CONFIGURING meryl\n";
+        print STDERR "--\n";
+        print STDERR "--\n";
+        haplotypeCountConfigure($asm, $merSize, %repartitionedParentalReads);
+        print STDERR "--\n";
+        print STDERR "--\n";
+        print STDERR "-- DONE  CONFIGURING meryl\n";
+        print STDERR "--\n";
+        print STDERR "--\n";
 
         print STDERR "--\n";
         print STDERR "--\n";
-        print STDERR "-- BEGIN CONFIGURING meryl AND meryl-count EXECUTION\n";
+        print STDERR "-- BEGIN meryl-count EXECUTION\n";
         print STDERR "--\n";
-        haplotypeCountConfigure($asm, $merSize, %haplotypeReads);
+        print STDERR "--\n";
         haplotypeCountCheck($asm)                   foreach (1..getGlobal("canuIterationMax") + 1);
         print STDERR "--\n";
         print STDERR "--\n";
-        print STDERR "-- DONE CONFIGURING meryl AND meryl-count EXECUTION\n";
+        print STDERR "-- DONE  meryl-count EXECUTION\n";
+        print STDERR "--\n";
         print STDERR "--\n";
 
         print STDERR "--\n";
         print STDERR "--\n";
         print STDERR "-- BEGIN meryl-merge/subtract EXECUTION\n";
+        print STDERR "--\n";
         print STDERR "--\n";
         haplotypeMergeCheck($asm, @haplotypes)      foreach (1..getGlobal("canuIterationMax") + 1);
         haplotypeSubtractCheck($asm, @haplotypes)   foreach (1..getGlobal("canuIterationMax") + 1);
         print STDERR "--\n";
         print STDERR "--\n";
-        print STDERR "-- BEGIN meryl-merge/subtract EXECUTION\n";
+        print STDERR "-- DONE  meryl-merge/subtract EXECUTION\n";
+        print STDERR "--\n";
         print STDERR "--\n";
 
+  hap:
         print STDERR "--\n";
         print STDERR "--\n";
         print STDERR "-- BEGIN ASSIGNING CHILD LONG READS\n";
         print STDERR "--\n";
-
+        print STDERR "--\n";
         haplotypeReadsConfigure($asm, \@haplotypes, \@inputFiles);
         haplotypeReadsCheck($asm)                   foreach (1..getGlobal("canuIterationMax") + 1);
+        print STDERR "--\n";
+        print STDERR "--\n";
+        print STDERR "-- DONE  ASSIGNING CHILD LONG READS\n";
+        print STDERR "--\n";
+        print STDERR "--\n";
     }
 }
 
