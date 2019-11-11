@@ -42,6 +42,8 @@ require Exporter;
 
 @ISA    = qw(Exporter);
 @EXPORT = qw(haplotypeReadsExist
+             estimateMerSize
+             haplotypeSplitReads
              haplotypeCountConfigure
              haplotypeCountCheck
              haplotypeMergeCheck
@@ -104,17 +106,20 @@ sub haplotypeSplitReads ($$%) {
     foreach my $haplotype (@haplotypes) {
         $splitNeeded = 1   if (! fileExists("$path/reads-$haplotype/reads-$haplotype.success"));
     }
-    return   if ($splitNeeded == 0);
+    return %haplotypeReads if ($splitNeeded == 0);
 
 
     #  Blindly split each file into 100 Mbp chunks.
     #    100x of a 150 Mbp genome ->  150 files.
     #    100x of a   3 Gbp genome -> 3000 files.
+    my %repartitionedHaplotypeReads;
     foreach my $haplotype (@haplotypes) {
         my @readFiles     = split '\0', $haplotypeReads{$haplotype};
         my $fileNumber    = "001";
         my $fileLength    = 0;
         my $fileLengthMax = 100000000; # 100 M
+
+        $repartitionedHaplotypeReads{@haplotypes} = ();
 
         next  if (fileExists("$path/reads-$haplotype/reads-$haplotype.success")); # only work on necessities
 
@@ -190,6 +195,8 @@ sub haplotypeSplitReads ($$%) {
 
         close(OUT);
         stashFile("$path/reads-$haplotype/reads-$haplotype-$fileNumber.fasta.gz");
+
+        push @{$repartitionedHaplotypeReads{$haplotype}}, "$path/reads-$haplotype/reads-$haplotype-$fileNumber.fasta.gz";
         # finish writing fasta
         #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
@@ -201,6 +208,19 @@ sub haplotypeSplitReads ($$%) {
         stashFile("$path/reads-$haplotype/reads-$haplotype.success");
         #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     }
+
+    stopAfter("parental-reads-repartition");
+
+    return %repartitionedHaplotypeReads; # reach here iff stopAfter != "parental-reads-repartition", i.e. user wants to continue
+}
+
+#  Pick an appropriate mer size based on genome size.
+sub estimateMerSize ($) {
+    my $genomeSize = shift @_;
+    my $erate      = 0.001;
+    my $merSize    = int(ceil(log($genomeSize * (1 - $erate) / $erate) / log(4)));
+
+    return $merSize
 }
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -214,6 +234,7 @@ sub haplotypeSplitReads ($$%) {
 #   * generate "meryl-merge.sh" & "meryl-subtract.sh"
 sub haplotypeCountConfigure ($%) {
     my $asm            = shift @_;
+    my $merSize        = shift @_;
     my %haplotypeReads =       @_;
     my $bin            = getBinDirectory();
     my $cmd;
@@ -226,18 +247,6 @@ sub haplotypeCountConfigure ($%) {
                        fileExists("$path/meryl-subtract.sh"));
 
     make_path($path)  if (! -d $path);
-
-    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-    #  Pick an appropriate mer size based on genome size.
-    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-    my $genomeSize = getGlobal("genomeSize");
-    my $erate      = 0.001;
-    my $merSize    = int(ceil(log($genomeSize * (1 - $erate) / $erate) / log(4)));
-
-    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-    #  Re-partition parental reads if we need to.
-    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-    haplotypeSplitReads($asm, $merSize, %haplotypeReads);
 
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #  Figure out what files meryl needs to count

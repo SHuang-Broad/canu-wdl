@@ -199,6 +199,11 @@ sub getAllowedResources ($$$$$@) {
     my $uni  = shift @_;  #  There's only one task to run (bogart, gfa)
     my $dbg  = shift @_;  #  Optional, report debugging stuff
 
+    if ($dbg) {
+        print STDERR "====================================\n";
+        print STDERR "DEBUG MODE is turned on for configuring resources for $tag$alg\n";
+    }
+
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     # Computing environment (grid or local)
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -309,7 +314,7 @@ sub getAllowedResources ($$$$$@) {
     #    taskThreads = 4,8,32,64
     #    taskMemory  = 16g,32g,64g
     my $bestCores      = 0;
-    my $bestMemory     = 16 * 1024 * 1024;   #  16 petabytes.
+    my $bestMemory     = 16 * 1024 * 1024;
     my $availMemoryMin = undef;
     my $availMemoryMax = undef;
     foreach my $m (@taskMemory) {
@@ -509,6 +514,10 @@ sub getAllowedResources ($$$$$@) {
     $all .= "-- Local: $t $mem  $thr x $job  $memt $thrt  $nam\n"      if ( defined($concurrent));
     $all .= "-- Grid:  $t $mem  $thr  $nam\n"                          if (!defined($concurrent));
 
+    if ($dbg) {
+        print STDERR "====================================\n";
+    }
+
     return($err, $all);
 }
 
@@ -581,7 +590,8 @@ sub displayGenomeSize ($) {
 ###############################################################################
 
 #  If minMemory or minThreads isn't defined, pick a reasonable pair based on genome size.
-sub configureAssembler () {
+sub configureAssembler (@) {
+    my $to_debug = shift @_;
 
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
     #  Parse units on things the user possibly set.
@@ -894,42 +904,66 @@ sub configureAssembler () {
     #  Finally, use all that setup to pick actual values for each component.
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
+    # directed by user that no resource configuration is necessary
+    goto configured if (getGlobal("skipConfiguration"));
+
     #  ovsMemory needs to be configured here iff the sequential build method is used.  This runs in
     #  the canu process, and needs to have a single memory size.  The parallel method will pick a
     #  memory size based on the number of overlaps and submit jobs using that size.
     my $err;
     my $all;
 
-    ($err, $all) = getAllowedResources("",    "meryl",     $err, $all, 0);
+    my $stopaf = getGlobal("stopAfter");
+    if (defined($stopaf) &&
+        $stopaf eq "parental-reads-repartition") {
+        goto configured;
+    }
 
-    ($err, $all) = getAllowedResources("",    "hap",       $err, $all, 0);
+    my $begat  = getGlobal("beginConfigAt");
+    goto $begat if (defined($begat));
 
-    ($err, $all) = getAllowedResources("cor", "mhap",      $err, $all, 0)   if (getGlobal("corOverlapper") eq "mhap");
-    ($err, $all) = getAllowedResources("cor", "mmap",      $err, $all, 0)   if (getGlobal("corOverlapper") eq "minimap");
-    ($err, $all) = getAllowedResources("cor", "ovl",       $err, $all, 0)   if (getGlobal("corOverlapper") eq "ovl");
+  meryl:
+    ($err, $all) = getAllowedResources("",    "meryl",     $err, $all, 0, $to_debug);
+    if (defined($stopaf)) {
+        goto configured if ($stopaf eq "meryl-configure" ||
+                            $stopaf eq "meryl-count" ||
+                            $stopaf eq "meryl-merge" ||
+                            $stopaf eq "meryl-subtract");
+    }
 
-    ($err, $all) = getAllowedResources("obt", "mhap",      $err, $all, 0)   if (getGlobal("obtOverlapper") eq "mhap");
-    ($err, $all) = getAllowedResources("obt", "mmap",      $err, $all, 0)   if (getGlobal("obtOverlapper") eq "minimap");
-    ($err, $all) = getAllowedResources("obt", "ovl",       $err, $all, 0)   if (getGlobal("obtOverlapper") eq "ovl");
+  hap:
+    ($err, $all) = getAllowedResources("",    "hap",       $err, $all, 0, $to_debug);
+    if (defined($stopaf)) {
+        goto configured if ($stopaf eq "haplotype-configure" ||
+                            $stopaf eq "haplotype");
+    }
 
-    ($err, $all) = getAllowedResources("utg", "mhap",      $err, $all, 0)   if (getGlobal("utgOverlapper") eq "mhap");
-    ($err, $all) = getAllowedResources("utg", "mmap",      $err, $all, 0)   if (getGlobal("utgOverlapper") eq "minimap");
-    ($err, $all) = getAllowedResources("utg", "ovl",       $err, $all, 0)   if (getGlobal("utgOverlapper") eq "ovl");
+    ($err, $all) = getAllowedResources("cor", "mhap",      $err, $all, 0, $to_debug)   if (getGlobal("corOverlapper") eq "mhap");
+    ($err, $all) = getAllowedResources("cor", "mmap",      $err, $all, 0, $to_debug)   if (getGlobal("corOverlapper") eq "minimap");
+    ($err, $all) = getAllowedResources("cor", "ovl",       $err, $all, 0, $to_debug)   if (getGlobal("corOverlapper") eq "ovl");
 
-    ($err, $all) = getAllowedResources("",    "cor",       $err, $all, 0);
+    ($err, $all) = getAllowedResources("obt", "mhap",      $err, $all, 0, $to_debug)   if (getGlobal("obtOverlapper") eq "mhap");
+    ($err, $all) = getAllowedResources("obt", "mmap",      $err, $all, 0, $to_debug)   if (getGlobal("obtOverlapper") eq "minimap");
+    ($err, $all) = getAllowedResources("obt", "ovl",       $err, $all, 0, $to_debug)   if (getGlobal("obtOverlapper") eq "ovl");
 
-    ($err, $all) = getAllowedResources("",    "ovb",       $err, $all, 0);
-    ($err, $all) = getAllowedResources("",    "ovs",       $err, $all, 0);
+    ($err, $all) = getAllowedResources("utg", "mhap",      $err, $all, 0, $to_debug)   if (getGlobal("utgOverlapper") eq "mhap");
+    ($err, $all) = getAllowedResources("utg", "mmap",      $err, $all, 0, $to_debug)   if (getGlobal("utgOverlapper") eq "minimap");
+    ($err, $all) = getAllowedResources("utg", "ovl",       $err, $all, 0, $to_debug)   if (getGlobal("utgOverlapper") eq "ovl");
 
-    ($err, $all) = getAllowedResources("",    "red",       $err, $all, 0);
-    ($err, $all) = getAllowedResources("",    "oea",       $err, $all, 0);
+    ($err, $all) = getAllowedResources("",    "cor",       $err, $all, 0, $to_debug);
 
-    ($err, $all) = getAllowedResources("",    "bat",       $err, $all, 1)   if (uc(getGlobal("unitigger")) eq "BOGART");
-    ($err, $all) = getAllowedResources("",    "dbg",       $err, $all, 1)   if (uc(getGlobal("unitigger")) eq "WTDBG");
+    ($err, $all) = getAllowedResources("",    "ovb",       $err, $all, 0, $to_debug);
+    ($err, $all) = getAllowedResources("",    "ovs",       $err, $all, 0, $to_debug);
 
-    ($err, $all) = getAllowedResources("",    "cns",       $err, $all, 0);
+    ($err, $all) = getAllowedResources("",    "red",       $err, $all, 0, $to_debug);
+    ($err, $all) = getAllowedResources("",    "oea",       $err, $all, 0, $to_debug);
 
-    ($err, $all) = getAllowedResources("",    "gfa",       $err, $all, 1);
+    ($err, $all) = getAllowedResources("",    "bat",       $err, $all, 1, $to_debug)   if (uc(getGlobal("unitigger")) eq "BOGART");
+    ($err, $all) = getAllowedResources("",    "dbg",       $err, $all, 1, $to_debug)   if (uc(getGlobal("unitigger")) eq "WTDBG");
+
+    ($err, $all) = getAllowedResources("",    "cns",       $err, $all, 0, $to_debug);
+
+    ($err, $all) = getAllowedResources("",    "gfa",       $err, $all, 1, $to_debug);
 
     #  Check some minimums.
     if ((getGlobal("ovsMemory") =~ m/^([0123456789.]+)-*[0123456789.]*$/) &&
@@ -937,6 +971,7 @@ sub configureAssembler () {
         caExit("ovsMemory must be at least 0.25g or 256m", undef);
     }
 
+  configured:
     #  2017-02-21 -- not sure why $err is being reported here if it doesn't stop.  What's in it?
     print STDERR "--\n" if (defined($err));
     print STDERR $err   if (defined($err));

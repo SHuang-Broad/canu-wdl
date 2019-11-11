@@ -97,6 +97,7 @@ my @specOpts;        #  Command line specs
 my @inputFiles;      #  Command line inputs, later inputs in spec files are added
 
 my %haplotypeReads;  #  Inpout reads for haplotypes; each element is a NUL-delimited list of files
+my @haplotypes;
 
 #  Initialize our defaults.  Must be done before defaults are reported in printOptions() below.
 setDefaults();
@@ -162,6 +163,8 @@ my $readdir       = undef;
 my $mode          = undef;   #  "haplotype", "correct", "trim", "trim-assemble" or "assemble"
 my $type          = undef;   #  "pacbio" or "nanopore"
 my $step          = "run";
+
+my $debug = undef;
 
 while (scalar(@ARGV)) {
     my $arg = shift @ARGV;
@@ -259,15 +262,18 @@ while (scalar(@ARGV)) {
         while (defined($fopt)) {
 
             $haplotypeReads{$hapname} .= "$fopt\0";
-
             addCommandLineOption("$arg '$fopt'");
 
             shift @ARGV;
-
             $file = $ARGV[0];
             $fopt = addSequenceFile($readdir, $file);
         }
 
+        @haplotypes = sort keys %haplotypeReads;
+    }
+    elsif ($arg eq "-hapNames") {
+        my $temp = shift @ARGV;
+        @haplotypes = split(/ /, $temp);
     }
     elsif (-e $arg) {
         addCommandLineError("ERROR:  File '$arg' supplied on command line, don't know what to do with it.\n");
@@ -277,6 +283,12 @@ while (scalar(@ARGV)) {
         push @specOpts, $arg;
         addCommandLineOption("'$arg'");
 
+    }
+    elsif ($arg eq "-debug") {
+        $debug = 1;
+    }
+    elsif ($arg eq "-skipConfiguration") {
+        setGlobalIfUndef("skipConfiguration", 1);
     }
     else {
         addCommandLineError("ERROR:  Invalid command line option '$arg'.  Did you forget quotes around options with spaces?\n");
@@ -394,7 +406,7 @@ configureDNANexus();
 #  Set jobs sizes based on genomeSize and available hosts;
 #  Check that parameters (except error rates) are valid and consistent;
 #  Fail if any thing flagged an error condition;
-configureAssembler();  #  Set job sizes and etc bases on genomeSize and hosts available.
+configureAssembler($debug);  #  Set job sizes and etc bases on genomeSize and hosts available.
 checkParameters();     #  Check all parameters (except error rates) are valid and consistent.
 printHelp();           #  And one final last chance to fail.
 
@@ -416,6 +428,16 @@ my $haveHiFi         = 0;
 my $setUpForPacBio   = 0;
 my $setUpForNanopore = 0;
 my $setUpForHiFi     = 0;
+
+# get user selected stopAfter, so that we can skip some configurations
+my $stopaf = getGlobal("stopAfter");
+my $skip_child_read_loading = $mode eq "haplotype" &&
+                                defined($stopaf) &&
+                                ($stopaf eq "parental-reads-repartition" ||
+                                 $stopaf eq "meryl-configure" ||
+                                 $stopaf eq "meryl-count" ||
+                                 $stopaf eq "meryl-merge" ||
+                                 $stopaf eq "meryl-subtract");
 
 #  Make space for us to work in, and move there.
 setWorkDirectory($asm, $rootdir);
@@ -519,7 +541,9 @@ elsif (scalar(@inputFiles) > 0) {
 }
 #  Otherwise, no reads found in a store, and no input files.
 else {
-    caExit("ERROR: No reads supplied, and can't find any reads in any seqStore", undef);
+    if ( !$skip_child_read_loading ) {
+        caExit("ERROR: No reads supplied, and can't find any reads in any seqStore", undef);
+    }
 }
 
 #  Set an initial run mode, based on the libraries we have found, or the stores that exist (unless
@@ -534,57 +558,58 @@ if (!defined($mode)) {
     $mode = "assemble"       if ($nAsm > 0);
 }
 
-#  Set the type of the reads.  A command line option could force the type, e.g., "-pacbio" or
-#  "-nanopore", to let you do cRaZy stuff like "-nanopore -pacbio-raw *fastq".
-if (!defined($type)) {
-    $type = "pacbio"        if ($setUpForPacBio   > 0);
-    $type = "nanopore"      if ($setUpForNanopore > 0);
-    $type = "hifi"          if ($setUpForHiFi     > 0);
+if ( !$skip_child_read_loading ) {
+    #  Set the type of the reads.  A command line option could force the type, e.g., "-pacbio" or
+    #  "-nanopore", to let you do cRaZy stuff like "-nanopore -pacbio-raw *fastq".
+    if (!defined($type)) {
+        $type = "pacbio"        if ($setUpForPacBio   > 0);
+        $type = "nanopore"      if ($setUpForNanopore > 0);
+        $type = "hifi"          if ($setUpForHiFi     > 0);
+    }
+
+    #  Now set error rates (if not set already) based on the dominant read type.
+    if ($type eq"pacbio") {
+        setGlobalIfUndef("corOvlErrorRate",  0.240);
+        setGlobalIfUndef("obtOvlErrorRate",  0.045);
+        setGlobalIfUndef("utgOvlErrorRate",  0.045);
+        setGlobalIfUndef("corErrorRate",     0.300);
+        setGlobalIfUndef("obtErrorRate",     0.045);
+        setGlobalIfUndef("utgErrorRate",     0.045);
+        setGlobalIfUndef("cnsErrorRate",     0.075);
+    }
+
+    if ($type eq"nanopore") {
+        setGlobalIfUndef("corOvlErrorRate",  0.320);
+        setGlobalIfUndef("obtOvlErrorRate",  0.120);
+        setGlobalIfUndef("utgOvlErrorRate",  0.120);
+        setGlobalIfUndef("corErrorRate",     0.500);
+        setGlobalIfUndef("obtErrorRate",     0.120);
+        setGlobalIfUndef("utgErrorRate",     0.120);
+        setGlobalIfUndef("cnsErrorRate",     0.200);
+    }
+
+    if ($type eq"hifi") {
+        setGlobalIfUndef("corOvlErrorRate",  0.000);
+        setGlobalIfUndef("obtOvlErrorRate",  0.000);
+        setGlobalIfUndef("utgOvlErrorRate",  0.025);
+        setGlobalIfUndef("corErrorRate",     0.000);
+        setGlobalIfUndef("obtErrorRate",     0.000);
+        setGlobalIfUndef("utgErrorRate",     0.025);
+        setGlobalIfUndef("cnsErrorRate",     0.050);
+        setGlobalIfUndef("batOptions",       "-eg 0.0003 -dg 3 -db 3 -dr 1 -ca 50 -cp 5");
+    }
+
+    #  Check for a few errors:
+    #    no mode                -> don't have any reads or any store to run from.
+    #    both raw and corrected -> don't know how to process these
+    caExit("ERROR: No reads supplied, and can't find any reads in any seqStore", undef)   if (!defined($mode));
+    caExit("ERROR: Failed to determine the sequencing technology of the reads", undef)    if (!defined($type));
+
+    caExit("ERROR: Can't mix uncorrected, corrected and hifi reads", undef)               if ($haveRaw  && $haveCorrected && $haveHiFi);
+    caExit("ERROR: Can't mix uncorrected and corrected reads", undef)                     if ($haveRaw  && $haveCorrected);
+    caExit("ERROR: Can't mix uncorrected and hifi reads", undef)                          if ($haveHiFi && $haveRaw);
+    caExit("ERROR: Can't mix corrected and hifi reads", undef)                            if ($haveHiFi && $haveCorrected);
 }
-
-#  Now set error rates (if not set already) based on the dominant read type.
-if ($type eq"pacbio") {
-    setGlobalIfUndef("corOvlErrorRate",  0.240);
-    setGlobalIfUndef("obtOvlErrorRate",  0.045);
-    setGlobalIfUndef("utgOvlErrorRate",  0.045);
-    setGlobalIfUndef("corErrorRate",     0.300);
-    setGlobalIfUndef("obtErrorRate",     0.045);
-    setGlobalIfUndef("utgErrorRate",     0.045);
-    setGlobalIfUndef("cnsErrorRate",     0.075);
-}
-
-if ($type eq"nanopore") {
-    setGlobalIfUndef("corOvlErrorRate",  0.320);
-    setGlobalIfUndef("obtOvlErrorRate",  0.120);
-    setGlobalIfUndef("utgOvlErrorRate",  0.120);
-    setGlobalIfUndef("corErrorRate",     0.500);
-    setGlobalIfUndef("obtErrorRate",     0.120);
-    setGlobalIfUndef("utgErrorRate",     0.120);
-    setGlobalIfUndef("cnsErrorRate",     0.200);
-}
-
-if ($type eq"hifi") {
-    setGlobalIfUndef("corOvlErrorRate",  0.000);
-    setGlobalIfUndef("obtOvlErrorRate",  0.000);
-    setGlobalIfUndef("utgOvlErrorRate",  0.025);
-    setGlobalIfUndef("corErrorRate",     0.000);
-    setGlobalIfUndef("obtErrorRate",     0.000);
-    setGlobalIfUndef("utgErrorRate",     0.025);
-    setGlobalIfUndef("cnsErrorRate",     0.050);
-    setGlobalIfUndef("batOptions",       "-eg 0.0003 -dg 3 -db 3 -dr 1 -ca 50 -cp 5");
-}
-
-#  Check for a few errors:
-#    no mode                -> don't have any reads or any store to run from.
-#    both raw and corrected -> don't know how to process these
-caExit("ERROR: No reads supplied, and can't find any reads in any seqStore", undef)   if (!defined($mode));
-caExit("ERROR: Failed to determine the sequencing technology of the reads", undef)    if (!defined($type));
-
-caExit("ERROR: Can't mix uncorrected, corrected and hifi reads", undef)               if ($haveRaw  && $haveCorrected && $haveHiFi);
-caExit("ERROR: Can't mix uncorrected and corrected reads", undef)                     if ($haveRaw  && $haveCorrected);
-caExit("ERROR: Can't mix uncorrected and hifi reads", undef)                          if ($haveHiFi && $haveRaw);
-caExit("ERROR: Can't mix corrected and hifi reads", undef)                            if ($haveHiFi && $haveCorrected);
-
 #  Check that we were supplied a work directory, and that it exists, or we can create it.
 make_path("canu-logs")     if (! -d "canu-logs");
 make_path("canu-scripts")  if (! -d "canu-scripts");
@@ -694,7 +719,6 @@ sub overlap ($$) {
 # if trio-binning is requested and hasn't finished sucessfully,
 # rely on subroutines defined in canu::HaplotypeReads for working,
 #  and on submitScript defined in canu::Execution for submission
-my @haplotypes = sort keys %haplotypeReads;
 if ((scalar(@haplotypes) > 0) &&
     (setOptions($mode, "haplotype") eq "haplotype")) {
     if ((! -e "./haplotype/haplotyping.success") &&
@@ -702,19 +726,79 @@ if ((scalar(@haplotypes) > 0) &&
 
         submitScript($asm, undef);   #  See comments there as to why this is safe.
 
+        my $begat  = getGlobal("beginConfigAt");
+        goto $begat if (defined($begat));
+
+        # we write the following steps following a vision such that
+        #   * parental read re-Partition
+        #   * meryl steps configuration & meryl-count parallel execution
+        #   * meryl-merge/subtract execution
+        #   * child long read assignment
+        # are done in different WDL tasks run on VMs of different specifications
         print STDERR "--\n";
         print STDERR "--\n";
-        print STDERR "-- BEGIN HAPLOTYPING\n";
+        print STDERR "-- BEGIN RE-PARTITIONING PARENTAL READS\n";
+        print STDERR "--\n";
+        print STDERR "--\n";
+        my $merSize = estimateMerSize(getGlobal("genomeSize"));
+        my %repartitionedParentalReads = haplotypeSplitReads($asm, $merSize, %haplotypeReads);
+        print STDERR "--\n";
+        print STDERR "--\n";
+        print STDERR "-- DONE RE-PARTITIONING PARENTAL READS\n";
+        print STDERR "--\n";
         print STDERR "--\n";
 
-        haplotypeCountConfigure($asm, %haplotypeReads);
+  meryl:
+        print STDERR "--\n";
+        print STDERR "--\n";
+        print STDERR "-- BEGIN CONFIGURING meryl\n";
+        print STDERR "--\n";
+        print STDERR "--\n";
+        haplotypeCountConfigure($asm, $merSize, %repartitionedParentalReads);
+        print STDERR "--\n";
+        print STDERR "--\n";
+        print STDERR "-- DONE  CONFIGURING meryl\n";
+        print STDERR "--\n";
+        print STDERR "--\n";
 
+        print STDERR "--\n";
+        print STDERR "--\n";
+        print STDERR "-- BEGIN meryl-count EXECUTION\n";
+        print STDERR "--\n";
+        print STDERR "--\n";
         haplotypeCountCheck($asm)                   foreach (1..getGlobal("canuIterationMax") + 1);
+        print STDERR "--\n";
+        print STDERR "--\n";
+        print STDERR "-- DONE  meryl-count EXECUTION\n";
+        print STDERR "--\n";
+        print STDERR "--\n";
+
+        print STDERR "--\n";
+        print STDERR "--\n";
+        print STDERR "-- BEGIN meryl-merge/subtract EXECUTION\n";
+        print STDERR "--\n";
+        print STDERR "--\n";
         haplotypeMergeCheck($asm, @haplotypes)      foreach (1..getGlobal("canuIterationMax") + 1);
         haplotypeSubtractCheck($asm, @haplotypes)   foreach (1..getGlobal("canuIterationMax") + 1);
+        print STDERR "--\n";
+        print STDERR "--\n";
+        print STDERR "-- DONE  meryl-merge/subtract EXECUTION\n";
+        print STDERR "--\n";
+        print STDERR "--\n";
 
+  hap:
+        print STDERR "--\n";
+        print STDERR "--\n";
+        print STDERR "-- BEGIN ASSIGNING CHILD LONG READS\n";
+        print STDERR "--\n";
+        print STDERR "--\n";
         haplotypeReadsConfigure($asm, \@haplotypes, \@inputFiles);
         haplotypeReadsCheck($asm)                   foreach (1..getGlobal("canuIterationMax") + 1);
+        print STDERR "--\n";
+        print STDERR "--\n";
+        print STDERR "-- DONE  ASSIGNING CHILD LONG READS\n";
+        print STDERR "--\n";
+        print STDERR "--\n";
     }
 }
 
