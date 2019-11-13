@@ -727,6 +727,9 @@ if ((scalar(@haplotypes) > 0) &&
 
         submitScript($asm, undef);   #  See comments there as to why this is safe.
 
+        my $merSize = estimateMerSize(getGlobal("genomeSize"));
+        my %repartitionedParentalReads;
+
         my $begat  = getGlobal("beginConfigAt");
         goto $begat if (defined($begat));
 
@@ -741,8 +744,7 @@ if ((scalar(@haplotypes) > 0) &&
         print STDERR "-- BEGIN RE-PARTITIONING PARENTAL READS\n";
         print STDERR "--\n";
         print STDERR "--\n";
-        my $merSize = estimateMerSize(getGlobal("genomeSize"));
-        my %repartitionedParentalReads = haplotypeSplitReads($asm, $merSize, %haplotypeReads);
+        %repartitionedParentalReads = haplotypeSplitReads($asm, $merSize, %haplotypeReads);
         print STDERR "--\n";
         print STDERR "--\n";
         print STDERR "-- DONE RE-PARTITIONING PARENTAL READS\n";
@@ -755,6 +757,7 @@ if ((scalar(@haplotypes) > 0) &&
         print STDERR "-- BEGIN CONFIGURING meryl\n";
         print STDERR "--\n";
         print STDERR "--\n";
+        %repartitionedParentalReads = %haplotypeReads;
         haplotypeCountConfigure($asm, $merSize, %repartitionedParentalReads);
         print STDERR "--\n";
         print STDERR "--\n";
