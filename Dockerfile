@@ -1,7 +1,6 @@
 FROM openjdk:8
 
 COPY . /opt/canu/
-ARG CANU_BRANCH="v1.9_wdl"
 RUN apt-get -qqy update --fix-missing && \
     apt-get -qqy dist-upgrade && \
     apt-get -qqy install --no-install-recommends \
@@ -13,7 +12,6 @@ RUN apt-get -qqy update --fix-missing && \
                  tree \
                  wget && \
     cd /opt/canu/src && \
-    git checkout ${CANU_BRANCH} && \
     make && \
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add - && \
@@ -30,5 +28,5 @@ RUN apt-get -qqy update --fix-missing && \
            /usr/share/man/??_*
 
 ENV PATH="/opt/canu/Linux-amd64/bin:${PATH}"
-RUN canu -citation && \
-    gsutil
+RUN canu --version && \
+    echo -e "\033[33mPlease watch out for the version of canu\033[0m"

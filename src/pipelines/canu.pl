@@ -184,6 +184,10 @@ while (scalar(@ARGV)) {
         exit(0);
 
     }
+    elsif (($arg eq "-v") || ($arg eq "--version")) {
+        print STDERR "-- " . getGlobal("version") . "\n";
+        exit(0);
+    }
     elsif ($arg eq "-d") {
         $rootdir = shift @ARGV;
 
