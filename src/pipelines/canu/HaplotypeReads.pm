@@ -323,6 +323,8 @@ sub haplotypeCountConfigure ($%) {
         while (scalar(@haplotypeFiles) > 0) { # iterate over input files from this haplotype/parent
             my $files = undef;
 
+            #  Emit a dictionary file telling which batch corresponds to which parental reads files
+            open(F, "> $path/$haplotype-$jid.dict") or caExit("can't open '$path/$haplotype-$jid.dict' for writing: $!", undef);
             for (my $n=0; $n<$nFilesPerJob; $n++) { # one batch
                 last   if (!defined($haplotypeFiles[0]));
 
@@ -332,8 +334,11 @@ sub haplotypeCountConfigure ($%) {
                     $files .= "         ./reads-$haplotype/reads-$haplotypeFiles[0].fasta.gz \\\n";
                 }
 
+                print F "reads-$haplotype/reads-$haplotypeFiles[0].fasta.gz\n";
+
                 shift @haplotypeFiles;
             }
+            close(F);
 
             $files =~ s/gz\s\\\n$/gz"/;   #  Remove the " \" at the end of the string, and add a terminating quote.
 
