@@ -378,7 +378,10 @@ sub haplotypeCountConfigure ($%) {
     #  300 MB per 100 Mb claim, meryl itself will dump partial results and
     #  merge at the end.
 
-    my $thr = getGlobal("merylThreads");
+    my $thr = getGlobal("kmerStatsThreads");
+    if (! defined($thr) ) {
+        $thr = getGlobal("merylThreads");
+    }
     my $mem = 2 + ceil(0.333 * $nFilesPerJob + 0.5);
 
     open(F, "> $path/meryl-count.memory") or caExit("can't open '$path/meryl-count.memory' for writing: $!", undef);
@@ -649,7 +652,7 @@ sub haplotypeCountConfigure ($%) {
     resetIteration("haplotypeCountConfigure");
 
   allDone:
-    stopAfter("meryl-configure");
+    stopAfter("parent-kmer-stat-conf");
 }
 
 # check that all jobs are executed successfully (retry if necessary)

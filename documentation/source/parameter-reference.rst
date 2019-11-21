@@ -215,6 +215,8 @@ stopAfter <string=undefined>
   +-----------------------+-------------------------------------------------------------------+
   | sequenceStore         | reads are loaded into the assembler read database.                |
   +-----------------------+-------------------------------------------------------------------+
+  | parent-kmer-stat-conf | parental kmer counting/merging/subtraction jobs are configured.   |
+  +-----------------------+-------------------------------------------------------------------+
   | meryl-configure       | kmer counting jobs are configured.                                |
   +-----------------------+-------------------------------------------------------------------+
   | meryl-count           | kmers are counted, but not processed into one database.           |

@@ -911,9 +911,16 @@ sub configureAssembler (@) {
     my $all;
 
     my $stopaf = getGlobal("stopAfter");
-    if (defined($stopaf) &&
-        $stopaf eq "parental-reads-repartition") {
-        goto configured;
+    if (defined($stopaf)) {
+        # this setting is based on
+        #  1) the fact that when collecting parental kmer stats,
+        #     the meryl operations use memory that is totally dependent only on parental short reads file count
+        #  2) the assumption that this custom repo is designed to be used effectively in local mode,
+        #     and the fact that the threads setting will be changed later anyway
+        if ($stopaf eq "parent-kmer-stat-conf") {
+            setGlobalIfUndef("kmerStatsThreads",  getNumberOfCPUs());
+            goto configured;
+        }
     }
 
     my $begat  = getGlobal("beginConfigAt");

@@ -1631,6 +1631,7 @@ sub checkParameters () {
 
         my @stopAfter = ("sequenceStore",
                          "parental-reads-repartition",
+                         "parent-kmer-stat-conf",
                          "meryl-configure",
                          "meryl-count",
                          "meryl-merge",

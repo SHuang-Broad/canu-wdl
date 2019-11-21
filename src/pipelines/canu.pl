@@ -428,6 +428,7 @@ my $setUpForHiFi     = 0;
 my $skip_child_read_loading = $mode eq "haplotype" &&
                                 defined($stopaf) &&
                                 ($stopaf eq "parental-reads-repartition" ||
+                                 $stopaf eq "parent-kmer-stat-conf" ||
                                  $stopaf eq "meryl-configure" ||
                                  $stopaf eq "meryl-count" ||
                                  $stopaf eq "meryl-merge" ||
