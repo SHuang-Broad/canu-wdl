@@ -9,6 +9,7 @@ RUN apt-get -qqy update --fix-missing && \
                  ca-certificates \
                  curl \
                  git \
+                 pigz \
                  tree \
                  wget && \
     cd /opt/canu/src && \
