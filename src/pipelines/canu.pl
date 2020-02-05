@@ -98,6 +98,7 @@ my @inputFiles;      #  Command line inputs, later inputs in spec files are adde
 
 my %haplotypeReads;  #  Inpout reads for haplotypes; each element is a NUL-delimited list of files
 my @haplotypes;
+my $trioBinKmerSize = 0;
 
 #  Initialize our defaults.  Must be done before defaults are reported in printOptions() below.
 setDefaults();
@@ -278,6 +279,13 @@ while (scalar(@ARGV)) {
     elsif ($arg eq "-hapNames") {
         my $temp = shift @ARGV;
         @haplotypes = split(/ /, $temp);
+    }
+    elsif ($arg eq "-triobinK") {
+        my $tk = shift @ARGV;
+        if ($tk <= 0 || $tk > 31) {
+            addCommandLineError("ERROR:  trio-binning k cannot be set to be over 31. Here's what's provided: $tk.\n");
+        }
+        $trioBinKmerSize = $tk;
     }
     elsif (-e $arg) {
         addCommandLineError("ERROR:  File '$arg' supplied on command line, don't know what to do with it.\n");
@@ -731,7 +739,12 @@ if ((scalar(@haplotypes) > 0) &&
 
         submitScript($asm, undef);   #  See comments there as to why this is safe.
 
-        my $merSize = estimateMerSize(getGlobal("genomeSize"));
+        if (0 == $trioBinKmerSize) {
+            $trioBinKmerSize = estimateMerSize(getGlobal("genomeSize"));
+        }
+        print STDERR "--\n";
+        print STDERR "-- USING k = $trioBinKmerSize\n";
+        print STDERR "--\n";
         my %repartitionedParentalReads;
 
         my $begat  = getGlobal("beginConfigAt");
@@ -748,7 +761,7 @@ if ((scalar(@haplotypes) > 0) &&
         print STDERR "-- BEGIN RE-PARTITIONING PARENTAL READS\n";
         print STDERR "--\n";
         print STDERR "--\n";
-        %repartitionedParentalReads = haplotypeSplitReads($asm, $merSize, %haplotypeReads);
+        %repartitionedParentalReads = haplotypeSplitReads($asm, $trioBinKmerSize, %haplotypeReads);
         print STDERR "--\n";
         print STDERR "--\n";
         print STDERR "-- DONE RE-PARTITIONING PARENTAL READS\n";
@@ -762,7 +775,7 @@ if ((scalar(@haplotypes) > 0) &&
         print STDERR "--\n";
         print STDERR "--\n";
         %repartitionedParentalReads = %haplotypeReads;
-        haplotypeCountConfigure($asm, $merSize, %repartitionedParentalReads);
+        haplotypeCountConfigure($asm, $trioBinKmerSize, %repartitionedParentalReads);
         print STDERR "--\n";
         print STDERR "--\n";
         print STDERR "-- DONE  CONFIGURING meryl\n";

@@ -278,30 +278,76 @@ sub haplotypeCountConfigure ($%) {
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
     # assuming diploid
-    #  -- Up to  5 files/job with   8 jobs ->   40 files.
-    #  -- Up to  8 files/job with  16 jobs ->  128 files.
-    #  -- Up to 11 files/job with  24 jobs ->  264 files.
-    #  -- Up to 14 files/job with  32 jobs ->  448 files.
-    #  -- Up to 17 files/job with  40 jobs ->  680 files.
-    #  -- Up to 20 files/job with  48 jobs ->  960 files.
-    #  -- Up to 23 files/job with  56 jobs -> 1288 files.
-    #  -- Up to 26 files/job with  64 jobs -> 1664 files.
-    #  -- Up to 29 files/job with  72 jobs -> 2088 files.
-    #  -- Up to 32 files/job with  80 jobs -> 2560 files.
-    #  -- Up to 35 files/job with  88 jobs -> 3080 files.
-    #  -- Up to 38 files/job with  96 jobs -> 3648 files.
-    #  -- Up to 41 files/job with 104 jobs -> 4264 files.
-    #  -- Up to 44 files/job with 112 jobs -> 4928 files.
-    #  -- Up to 47 files/job with 120 jobs -> 5640 files.
-    #  -- Up to 50 files/job with 128 jobs -> 6400 files.
+    my $nFilesPerJob;
+    my $nJobsMax;
+    if ($merSize <= 21) { # based on experience, we find that with smaller k, smaller batches costs less
+        #  -- Up to  5 files/job with   8 jobs ->   40 files.
+        #  -- Up to  8 files/job with  16 jobs ->  128 files.
+        #  -- Up to 11 files/job with  24 jobs ->  264 files.
+        #  -- Up to 14 files/job with  32 jobs ->  448 files.
+        #  -- Up to 17 files/job with  40 jobs ->  680 files.
+        #  -- Up to 20 files/job with  48 jobs ->  960 files.
+        #  -- Up to 23 files/job with  56 jobs -> 1288 files.
+        #  -- Up to 26 files/job with  64 jobs -> 1664 files.
+        #  -- Up to 29 files/job with  72 jobs -> 2088 files.
+        #  -- Up to 32 files/job with  80 jobs -> 2560 files.
+        #  -- Up to 35 files/job with  88 jobs -> 3080 files.
+        #  -- Up to 38 files/job with  96 jobs -> 3648 files.
+        #  -- Up to 41 files/job with 104 jobs -> 4264 files.
+        #  -- Up to 44 files/job with 112 jobs -> 4928 files.
+        #  -- Up to 47 files/job with 120 jobs -> 5640 files.
+        #  -- Up to 50 files/job with 128 jobs -> 6400 files.
 
-    my $nFilesPerJob = 5;
-    my $nJobsMax     = 4 * scalar(@haplotypes);
-    #print STDERR "-- Up to $nFilesPerJob files/job with $nJobsMax jobs -> ", $nFilesPerJob * $nJobsMax, " files.\n";
-    while ($nFilesPerJob * $nJobsMax < $totalFilesCount) {
-        $nFilesPerJob += 3;
-        $nJobsMax     += 4 * scalar(@haplotypes);
+        $nFilesPerJob = 5;
+        $nJobsMax     = 4 * scalar(@haplotypes);
         #print STDERR "-- Up to $nFilesPerJob files/job with $nJobsMax jobs -> ", $nFilesPerJob * $nJobsMax, " files.\n";
+        while ($nFilesPerJob * $nJobsMax < $totalFilesCount) {
+            $nFilesPerJob += 3;
+            $nJobsMax     += 4 * scalar(@haplotypes);
+            #print STDERR "-- Up to $nFilesPerJob files/job with $nJobsMax jobs -> ", $nFilesPerJob * $nJobsMax, " files.\n";
+        }
+    } else {
+        #  -- Up to  5 files/job with  2 jobs ->   10 files.
+        #  -- Up to  8 files/job with  4 jobs ->   32 files.
+        #  -- Up to 11 files/job with  6 jobs ->   66 files.
+        #  -- Up to 14 files/job with  8 jobs ->  112 files.
+        #  -- Up to 17 files/job with 10 jobs ->  170 files.
+        #  -- Up to 20 files/job with 12 jobs ->  240 files.
+        #  -- Up to 23 files/job with 14 jobs ->  322 files.
+        #  -- Up to 26 files/job with 16 jobs ->  416 files.
+        #  -- Up to 29 files/job with 18 jobs ->  522 files.
+        #  -- Up to 32 files/job with 20 jobs ->  640 files.
+        #  -- Up to 35 files/job with 22 jobs ->  770 files.
+        #  -- Up to 38 files/job with 24 jobs ->  912 files.
+        #  -- Up to 41 files/job with 26 jobs -> 1066 files.
+        #  -- Up to 44 files/job with 28 jobs -> 1232 files.
+        #  -- Up to 47 files/job with 30 jobs -> 1410 files.
+        #  -- Up to 50 files/job with 32 jobs -> 1600 files.
+        #  -- Up to 53 files/job with 34 jobs -> 1802 files.
+        #  -- Up to 56 files/job with 36 jobs -> 2016 files.
+        #  -- Up to 59 files/job with 38 jobs -> 2242 files.
+        #  -- Up to 62 files/job with 40 jobs -> 2480 files.
+        #  -- Up to 65 files/job with 42 jobs -> 2730 files.
+        #  -- Up to 68 files/job with 44 jobs -> 2992 files.
+        #  -- Up to 71 files/job with 46 jobs -> 3266 files.
+        #  -- Up to 74 files/job with 48 jobs -> 3552 files.
+        #  -- Up to 77 files/job with 50 jobs -> 3850 files.
+        #  -- Up to 80 files/job with 52 jobs -> 4160 files.
+        #  -- Up to 83 files/job with 54 jobs -> 4482 files.
+        #  -- Up to 86 files/job with 56 jobs -> 4816 files.
+        #  -- Up to 89 files/job with 58 jobs -> 5162 files.
+        #  -- Up to 92 files/job with 60 jobs -> 5520 files.
+        #  -- Up to 95 files/job with 62 jobs -> 5890 files.
+        #  -- Up to 98 files/job with 64 jobs -> 6272 files.
+
+        $nFilesPerJob = 5;
+        $nJobsMax     = scalar(@haplotypes);
+        #print STDERR "-- Up to $nFilesPerJob files/job with $nJobsMax jobs -> ", $nFilesPerJob * $nJobsMax, " files.\n";
+        while ($nFilesPerJob * $nJobsMax < $totalFilesCount) {
+            $nFilesPerJob += 3;
+            $nJobsMax     += scalar(@haplotypes);
+            #print STDERR "-- Up to $nFilesPerJob files/job with $nJobsMax jobs -> ", $nFilesPerJob * $nJobsMax, " files.\n";
+        }
     }
     print STDERR "-- Will use $nJobsMax jobs with up to $nFilesPerJob files each.\n";
 

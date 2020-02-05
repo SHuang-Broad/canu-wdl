@@ -24,3 +24,4 @@ __Note that the default branch of this repo is not `master` but `v1.9_wdl_patch`
         Allow running with empty merylDB filename, for testing the threshold computation.  Issue #1538.
 
     ```
+  * expose an CLI to specify the value of $k$ (practically to allow $k = 31$) used in _k_-mer stats collection on parental reads.
